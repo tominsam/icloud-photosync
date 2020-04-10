@@ -8,7 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		7253B47A24410931003A40E0 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7253B47924410931003A40E0 /* AppDelegate.swift */; };
-		7253B47E24410931003A40E0 /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7253B47D24410931003A40E0 /* ViewController.swift */; };
+		7253B47E24410931003A40E0 /* ConnectViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7253B47D24410931003A40E0 /* ConnectViewController.swift */; };
 		7253B48424410931003A40E0 /* PhotoSync.xcdatamodeld in Sources */ = {isa = PBXBuildFile; fileRef = 7253B48224410931003A40E0 /* PhotoSync.xcdatamodeld */; };
 		7253B48624410933003A40E0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7253B48524410933003A40E0 /* Assets.xcassets */; };
 		7253B48924410933003A40E0 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 7253B48724410933003A40E0 /* LaunchScreen.storyboard */; };
@@ -17,6 +17,12 @@
 		7253B49924410B1B003A40E0 /* SwiftyDropbox.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7253B49824410B1B003A40E0 /* SwiftyDropbox.framework */; };
 		7253B49A24410B1B003A40E0 /* SwiftyDropbox.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 7253B49824410B1B003A40E0 /* SwiftyDropbox.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		7253B49C24410B6F003A40E0 /* SwiftyDropbox.framework in CopyFiles */ = {isa = PBXBuildFile; fileRef = 7253B49824410B1B003A40E0 /* SwiftyDropbox.framework */; };
+		7253B49E24412379003A40E0 /* UIView+Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7253B49D24412379003A40E0 /* UIView+Extensions.swift */; };
+		7253B4A224412487003A40E0 /* UIControl+Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7253B4A124412487003A40E0 /* UIControl+Extensions.swift */; };
+		7253B4A724412740003A40E0 /* KeychainSwift.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7253B4A62441273F003A40E0 /* KeychainSwift.framework */; };
+		7253B4A824412740003A40E0 /* KeychainSwift.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 7253B4A62441273F003A40E0 /* KeychainSwift.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		7253B4AB2441286A003A40E0 /* PhotosViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7253B4AA2441286A003A40E0 /* PhotosViewController.swift */; };
+		7253B4AD24412A10003A40E0 /* UIBarButtonItem+Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7253B4AC24412A10003A40E0 /* UIBarButtonItem+Extensions.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -26,6 +32,7 @@
 			dstPath = "";
 			dstSubfolderSpec = 10;
 			files = (
+				7253B4A824412740003A40E0 /* KeychainSwift.framework in Embed Frameworks */,
 				7253B495244109F6003A40E0 /* Alamofire.framework in Embed Frameworks */,
 				7253B49A24410B1B003A40E0 /* SwiftyDropbox.framework in Embed Frameworks */,
 			);
@@ -47,14 +54,20 @@
 /* Begin PBXFileReference section */
 		7253B47624410931003A40E0 /* PhotoSync.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PhotoSync.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7253B47924410931003A40E0 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
-		7253B47D24410931003A40E0 /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
+		7253B47D24410931003A40E0 /* ConnectViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectViewController.swift; sourceTree = "<group>"; };
 		7253B48324410931003A40E0 /* PhotoSync.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = PhotoSync.xcdatamodel; sourceTree = "<group>"; };
 		7253B48524410933003A40E0 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		7253B48824410933003A40E0 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		7253B48A24410933003A40E0 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		7253B492244109DB003A40E0 /* Alamofire.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Alamofire.framework; path = Carthage/Build/iOS/Alamofire.framework; sourceTree = "<group>"; };
-		7253B49724410B11003A40E0 /* 69E1AE9E-8FE9-30C8-87C6-10D797A86CA9.bcsymbolmap */ = {isa = PBXFileReference; lastKnownFileType = text; name = "69E1AE9E-8FE9-30C8-87C6-10D797A86CA9.bcsymbolmap"; path = "Carthage/Build/iOS/69E1AE9E-8FE9-30C8-87C6-10D797A86CA9.bcsymbolmap"; sourceTree = "<group>"; };
 		7253B49824410B1B003A40E0 /* SwiftyDropbox.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftyDropbox.framework; path = Carthage/Build/iOS/SwiftyDropbox.framework; sourceTree = "<group>"; };
+		7253B49D24412379003A40E0 /* UIView+Extensions.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "UIView+Extensions.swift"; sourceTree = "<group>"; };
+		7253B4A124412487003A40E0 /* UIControl+Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "UIControl+Extensions.swift"; sourceTree = "<group>"; };
+		7253B4A42441271F003A40E0 /* Cartfile */ = {isa = PBXFileReference; lastKnownFileType = text; path = Cartfile; sourceTree = "<group>"; };
+		7253B4A52441272D003A40E0 /* README */ = {isa = PBXFileReference; lastKnownFileType = text; path = README; sourceTree = "<group>"; };
+		7253B4A62441273F003A40E0 /* KeychainSwift.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = KeychainSwift.framework; path = Carthage/Build/iOS/KeychainSwift.framework; sourceTree = "<group>"; };
+		7253B4AA2441286A003A40E0 /* PhotosViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotosViewController.swift; sourceTree = "<group>"; };
+		7253B4AC24412A10003A40E0 /* UIBarButtonItem+Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "UIBarButtonItem+Extensions.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -62,6 +75,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7253B4A724412740003A40E0 /* KeychainSwift.framework in Frameworks */,
 				7253B494244109F6003A40E0 /* Alamofire.framework in Frameworks */,
 				7253B49924410B1B003A40E0 /* SwiftyDropbox.framework in Frameworks */,
 			);
@@ -74,6 +88,7 @@
 			isa = PBXGroup;
 			children = (
 				7253B47824410931003A40E0 /* PhotoSync */,
+				7253B4A324412710003A40E0 /* Meta */,
 				7253B47724410931003A40E0 /* Products */,
 				7253B491244109DB003A40E0 /* Frameworks */,
 			);
@@ -90,8 +105,9 @@
 		7253B47824410931003A40E0 /* PhotoSync */ = {
 			isa = PBXGroup;
 			children = (
+				7253B4A9244127E6003A40E0 /* View Controllers */,
+				7253B49F2441237E003A40E0 /* Extensions */,
 				7253B47924410931003A40E0 /* AppDelegate.swift */,
-				7253B47D24410931003A40E0 /* ViewController.swift */,
 				7253B48524410933003A40E0 /* Assets.xcassets */,
 				7253B48724410933003A40E0 /* LaunchScreen.storyboard */,
 				7253B48A24410933003A40E0 /* Info.plist */,
@@ -103,11 +119,39 @@
 		7253B491244109DB003A40E0 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				7253B4A62441273F003A40E0 /* KeychainSwift.framework */,
 				7253B49824410B1B003A40E0 /* SwiftyDropbox.framework */,
-				7253B49724410B11003A40E0 /* 69E1AE9E-8FE9-30C8-87C6-10D797A86CA9.bcsymbolmap */,
 				7253B492244109DB003A40E0 /* Alamofire.framework */,
 			);
 			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		7253B49F2441237E003A40E0 /* Extensions */ = {
+			isa = PBXGroup;
+			children = (
+				7253B49D24412379003A40E0 /* UIView+Extensions.swift */,
+				7253B4A124412487003A40E0 /* UIControl+Extensions.swift */,
+				7253B4AC24412A10003A40E0 /* UIBarButtonItem+Extensions.swift */,
+			);
+			path = Extensions;
+			sourceTree = "<group>";
+		};
+		7253B4A324412710003A40E0 /* Meta */ = {
+			isa = PBXGroup;
+			children = (
+				7253B4A52441272D003A40E0 /* README */,
+				7253B4A42441271F003A40E0 /* Cartfile */,
+			);
+			name = Meta;
+			sourceTree = "<group>";
+		};
+		7253B4A9244127E6003A40E0 /* View Controllers */ = {
+			isa = PBXGroup;
+			children = (
+				7253B47D24410931003A40E0 /* ConnectViewController.swift */,
+				7253B4AA2441286A003A40E0 /* PhotosViewController.swift */,
+			);
+			path = "View Controllers";
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -189,6 +233,7 @@
 			inputPaths = (
 				"$(SRCROOT)/Carthage/Build/iOS/SwiftyDropbox.framework",
 				"$(SRCROOT)/Carthage/Build/iOS/Alamofire.framework",
+				"$(SRCROOT)/Carthage/Build/iOS/SwiftyDropbox.framework",
 			);
 			name = "carthage copy frameworks";
 			outputFileListPaths = (
@@ -206,8 +251,12 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				7253B47E24410931003A40E0 /* ViewController.swift in Sources */,
+				7253B47E24410931003A40E0 /* ConnectViewController.swift in Sources */,
+				7253B4AD24412A10003A40E0 /* UIBarButtonItem+Extensions.swift in Sources */,
 				7253B48424410931003A40E0 /* PhotoSync.xcdatamodeld in Sources */,
+				7253B4A224412487003A40E0 /* UIControl+Extensions.swift in Sources */,
+				7253B4AB2441286A003A40E0 /* PhotosViewController.swift in Sources */,
+				7253B49E24412379003A40E0 /* UIView+Extensions.swift in Sources */,
 				7253B47A24410931003A40E0 /* AppDelegate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

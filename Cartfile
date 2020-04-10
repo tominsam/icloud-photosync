@@ -1,2 +1,3 @@
 github "https://github.com/dropbox/SwiftyDropbox" ~> 5.1.0
+github "evgenyneu/keychain-swift" ~> 19.0
 
