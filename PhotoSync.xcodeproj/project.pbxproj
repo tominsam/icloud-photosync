@@ -14,7 +14,37 @@
 		7253B48424410931003A40E0 /* PhotoSync.xcdatamodeld in Sources */ = {isa = PBXBuildFile; fileRef = 7253B48224410931003A40E0 /* PhotoSync.xcdatamodeld */; };
 		7253B48624410933003A40E0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7253B48524410933003A40E0 /* Assets.xcassets */; };
 		7253B48924410933003A40E0 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 7253B48724410933003A40E0 /* LaunchScreen.storyboard */; };
+		7253B494244109F6003A40E0 /* Alamofire.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7253B492244109DB003A40E0 /* Alamofire.framework */; };
+		7253B495244109F6003A40E0 /* Alamofire.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 7253B492244109DB003A40E0 /* Alamofire.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		7253B49924410B1B003A40E0 /* SwiftyDropbox.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7253B49824410B1B003A40E0 /* SwiftyDropbox.framework */; };
+		7253B49A24410B1B003A40E0 /* SwiftyDropbox.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 7253B49824410B1B003A40E0 /* SwiftyDropbox.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		7253B49C24410B6F003A40E0 /* SwiftyDropbox.framework in CopyFiles */ = {isa = PBXBuildFile; fileRef = 7253B49824410B1B003A40E0 /* SwiftyDropbox.framework */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		7253B496244109F6003A40E0 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				7253B495244109F6003A40E0 /* Alamofire.framework in Embed Frameworks */,
+				7253B49A24410B1B003A40E0 /* SwiftyDropbox.framework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7253B49B24410B5B003A40E0 /* CopyFiles */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 16;
+			files = (
+				7253B49C24410B6F003A40E0 /* SwiftyDropbox.framework in CopyFiles */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		7253B47624410931003A40E0 /* PhotoSync.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PhotoSync.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -26,6 +56,9 @@
 		7253B48524410933003A40E0 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		7253B48824410933003A40E0 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		7253B48A24410933003A40E0 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		7253B492244109DB003A40E0 /* Alamofire.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Alamofire.framework; path = Carthage/Build/iOS/Alamofire.framework; sourceTree = "<group>"; };
+		7253B49724410B11003A40E0 /* 69E1AE9E-8FE9-30C8-87C6-10D797A86CA9.bcsymbolmap */ = {isa = PBXFileReference; lastKnownFileType = text; name = "69E1AE9E-8FE9-30C8-87C6-10D797A86CA9.bcsymbolmap"; path = "Carthage/Build/iOS/69E1AE9E-8FE9-30C8-87C6-10D797A86CA9.bcsymbolmap"; sourceTree = "<group>"; };
+		7253B49824410B1B003A40E0 /* SwiftyDropbox.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftyDropbox.framework; path = Carthage/Build/iOS/SwiftyDropbox.framework; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -33,6 +66,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7253B494244109F6003A40E0 /* Alamofire.framework in Frameworks */,
+				7253B49924410B1B003A40E0 /* SwiftyDropbox.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -44,6 +79,7 @@
 			children = (
 				7253B47824410931003A40E0 /* PhotoSync */,
 				7253B47724410931003A40E0 /* Products */,
+				7253B491244109DB003A40E0 /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
@@ -70,6 +106,16 @@
 			path = PhotoSync;
 			sourceTree = "<group>";
 		};
+		7253B491244109DB003A40E0 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				7253B49824410B1B003A40E0 /* SwiftyDropbox.framework */,
+				7253B49724410B11003A40E0 /* 69E1AE9E-8FE9-30C8-87C6-10D797A86CA9.bcsymbolmap */,
+				7253B492244109DB003A40E0 /* Alamofire.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -80,6 +126,9 @@
 				7253B47224410931003A40E0 /* Sources */,
 				7253B47324410931003A40E0 /* Frameworks */,
 				7253B47424410931003A40E0 /* Resources */,
+				7253B49024410989003A40E0 /* carthage copy frameworks */,
+				7253B496244109F6003A40E0 /* Embed Frameworks */,
+				7253B49B24410B5B003A40E0 /* CopyFiles */,
 			);
 			buildRules = (
 			);
@@ -135,6 +184,29 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		7253B49024410989003A40E0 /* carthage copy frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/Carthage/Build/iOS/SwiftyDropbox.framework",
+				"$(SRCROOT)/Carthage/Build/iOS/Alamofire.framework",
+			);
+			name = "carthage copy frameworks";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "/usr/local/bin/carthage copy-frameworks\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		7253B47224410931003A40E0 /* Sources */ = {
@@ -290,6 +362,10 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = D9KHN33QB5;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/Carthage/Build/iOS",
+				);
 				INFOPLIST_FILE = PhotoSync/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -308,6 +384,10 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = D9KHN33QB5;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/Carthage/Build/iOS",
+				);
 				INFOPLIST_FILE = PhotoSync/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
