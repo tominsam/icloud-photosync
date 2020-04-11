@@ -17,7 +17,7 @@ extension NSNotification.Name {
 
 class PhotoKitManager: NSObject {
 
-    let persistentContainer: NSPersistentContainer = AppDelegate.shared.persistentContainer
+    let persistentContainer = AppDelegate.shared.persistentContainer!
 
     // Arbitrary identifier for this run
     //private let runIdentifier = UUID().uuidString

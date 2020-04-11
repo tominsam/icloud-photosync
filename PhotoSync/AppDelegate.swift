@@ -22,28 +22,16 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     lazy var navigationController = UINavigationController()
 
     lazy var keychain = KeychainSwift()
-    var persistentContainer: NSPersistentContainer!
+    var persistentContainer: NSPersistentContainer?
 
     var dropboxClient: DropboxClient?
     lazy var photoKitManager = PhotoKitManager()
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         DropboxClientsManager.setupWithAppKey("ru820t3myp7s6vk")
-
         window!.rootViewController = navigationController
         window!.makeKeyAndVisible()
-
-        persistentContainer = NSPersistentContainer(name: "PhotoSync")
-        persistentContainer.loadPersistentStores(completionHandler: { (storeDescription, error) in
-            if let error = error as NSError? {
-                self.navigationController.present(UIAlertController(title: "Error", message: error.localizedDescription, preferredStyle: .alert), animated: true, completion: nil)
-//                fatalError("Unresolved error \(error), \(error.userInfo)")
-            } else {
-                self.persistentContainer.viewContext.automaticallyMergesChangesFromParent = true
-                self.updateViewController()
-            }
-        })
-
+        loadPersistentStore()
         return true
     }
 
@@ -52,28 +40,38 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             switch authResult {
             case .success(let accessToken):
                 logIn(accessToken: accessToken.accessToken)
-
             case .cancel:
                 break
-
             case .error(_, let description):
-                navigationController.present(UIAlertController(title: "Error", message: description, preferredStyle: .alert), animated: true, completion: nil)
+                navigationController.present(UIAlertController.simpleAlert(title: "Dropbox Error", message: description, action: "OK"), animated: true, completion: nil)
             }
         }
         return true
     }
 
-    // MARK: - Core Data Saving support
-    func saveContext () {
-        let context = persistentContainer.viewContext
-        if context.hasChanges {
-            do {
-                try context.save()
-            } catch {
-                let error = error as NSError
-                fatalError("Unresolved error \(error), \(error.userInfo)")
-            }
+    func applicationDidBecomeActive(_ application: UIApplication) {
+        startSync()
+    }
+
+    func loadPersistentStore() {
+        guard persistentContainer == nil else {
+            return
         }
+
+        let persistentContainer = NSPersistentContainer(name: "PhotoSync")
+        persistentContainer.loadPersistentStores(completionHandler: { (storeDescription, error) in
+            if let error = error as NSError? {
+                let alert = UIAlertController.simpleAlert(title: "Database Error", message: error.localizedDescription, action: "OK") { _ in
+                    try! FileManager.default.removeItem(at: NSPersistentContainer.defaultDirectoryURL())
+                    self.loadPersistentStore()
+                }
+                self.navigationController.present(alert, animated: true, completion: nil)
+            } else {
+                persistentContainer.viewContext.automaticallyMergesChangesFromParent = true
+                self.persistentContainer = persistentContainer
+                self.updateViewController()
+            }
+        })
     }
 
     func updateViewController() {
@@ -100,6 +98,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     func startSync() {
+        guard persistentContainer != nil else { return }
+
         switch PHPhotoLibrary.authorizationStatus() {
         case .notDetermined:
             PHPhotoLibrary.requestAuthorization { status in
@@ -111,7 +111,10 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             photoKitManager.sync()
         default:
             // TODO
-            navigationController.present(UIAlertController(title: "Error", message: "Photo permission", preferredStyle: .alert), animated: true, completion: nil)
+            let alert = UIAlertController.simpleAlert(title: "Error", message: "Photo permission", action: "OK") { _ in
+                // TODO open settings or something
+            }
+            navigationController.present(alert, animated: true, completion: nil)
         }
     }
 

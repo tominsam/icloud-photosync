@@ -30,6 +30,7 @@
 		7253B4BC24418A23003A40E0 /* Cells+Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7253B4BB24418A23003A40E0 /* Cells+Extensions.swift */; };
 		7253B4BE24418B13003A40E0 /* Configurable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7253B4BD24418B13003A40E0 /* Configurable.swift */; };
 		7253B4C02442385F003A40E0 /* Sequence+Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7253B4BF2442385F003A40E0 /* Sequence+Extensions.swift */; };
+		7253B4C424427AA8003A40E0 /* Alert+Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7253B4C324427AA8003A40E0 /* Alert+Extensions.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -82,6 +83,7 @@
 		7253B4BB24418A23003A40E0 /* Cells+Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Cells+Extensions.swift"; sourceTree = "<group>"; };
 		7253B4BD24418B13003A40E0 /* Configurable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Configurable.swift; sourceTree = "<group>"; };
 		7253B4BF2442385F003A40E0 /* Sequence+Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sequence+Extensions.swift"; sourceTree = "<group>"; };
+		7253B4C324427AA8003A40E0 /* Alert+Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Alert+Extensions.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -152,6 +154,7 @@
 				7253B4BB24418A23003A40E0 /* Cells+Extensions.swift */,
 				7253B4BD24418B13003A40E0 /* Configurable.swift */,
 				7253B4BF2442385F003A40E0 /* Sequence+Extensions.swift */,
+				7253B4C324427AA8003A40E0 /* Alert+Extensions.swift */,
 			);
 			path = Extensions;
 			sourceTree = "<group>";
@@ -299,6 +302,7 @@
 				7253B47E24410931003A40E0 /* ConnectViewController.swift in Sources */,
 				7253B4BC24418A23003A40E0 /* Cells+Extensions.swift in Sources */,
 				7253B4C02442385F003A40E0 /* Sequence+Extensions.swift in Sources */,
+				7253B4C424427AA8003A40E0 /* Alert+Extensions.swift in Sources */,
 				7253B4AD24412A10003A40E0 /* UIBarButtonItem+Extensions.swift in Sources */,
 				7253B4B624413A1F003A40E0 /* CoreData+Extensions.swift in Sources */,
 				7253B48424410931003A40E0 /* PhotoSync.xcdatamodeld in Sources */,

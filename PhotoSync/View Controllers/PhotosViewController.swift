@@ -14,7 +14,7 @@ class PhotosViewController: UIViewController {
 
     lazy var fetchedResultsController = NSFetchedResultsController<Photo>(
         fetchRequest: Photo.fetch(),
-        managedObjectContext: AppDelegate.shared.persistentContainer.viewContext,
+        managedObjectContext: AppDelegate.shared.persistentContainer!.viewContext,
         sectionNameKeyPath: nil,
         cacheName: nil).configured {
             // One note here - we do _not_ set a delegate on this object! We change thousands
