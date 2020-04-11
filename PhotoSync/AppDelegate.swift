@@ -21,14 +21,28 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     lazy var navigationController = UINavigationController()
 
     lazy var keychain = KeychainSwift()
+    var persistentContainer: NSPersistentContainer!
 
     var dropboxClient: DropboxClient?
+    lazy var photoKitManager = PhotoKitManager()
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         DropboxClientsManager.setupWithAppKey("ru820t3myp7s6vk")
+
         window!.rootViewController = navigationController
         window!.makeKeyAndVisible()
-        updateViewController()
+
+        persistentContainer = NSPersistentContainer(name: "PhotoSync")
+        persistentContainer.loadPersistentStores(completionHandler: { (storeDescription, error) in
+            if let error = error as NSError? {
+                self.navigationController.present(UIAlertController(title: "Error", message: error.localizedDescription, preferredStyle: .alert), animated: true, completion: nil)
+//                fatalError("Unresolved error \(error), \(error.userInfo)")
+            } else {
+                self.persistentContainer.viewContext.automaticallyMergesChangesFromParent = true
+                self.updateViewController()
+            }
+        })
+
         return true
     }
 
@@ -48,17 +62,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         return true
     }
 
-    // MARK: - Core Data stack
-    lazy var persistentContainer: NSPersistentContainer = {
-        let container = NSPersistentContainer(name: "PhotoSync")
-        container.loadPersistentStores(completionHandler: { (storeDescription, error) in
-            if let error = error as NSError? {
-                fatalError("Unresolved error \(error), \(error.userInfo)")
-            }
-        })
-        return container
-    }()
-
     // MARK: - Core Data Saving support
     func saveContext () {
         let context = persistentContainer.viewContext
@@ -73,6 +76,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     func updateViewController() {
+        
         if let accessToken = keychain.get(Self.KeychainDropboxAccessToken) {
             dropboxClient = DropboxClient(accessToken: accessToken)
             navigationController.viewControllers = [PhotosViewController()]
@@ -82,6 +86,10 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
                 if case .authError = error {
                     self.logOut()
                 }
+            }
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(2)) {
+                self.photoKitManager.sync()
             }
 
         } else {

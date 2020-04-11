@@ -23,6 +23,13 @@
 		7253B4A824412740003A40E0 /* KeychainSwift.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 7253B4A62441273F003A40E0 /* KeychainSwift.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		7253B4AB2441286A003A40E0 /* PhotosViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7253B4AA2441286A003A40E0 /* PhotosViewController.swift */; };
 		7253B4AD24412A10003A40E0 /* UIBarButtonItem+Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7253B4AC24412A10003A40E0 /* UIBarButtonItem+Extensions.swift */; };
+		7253B4B1244134C9003A40E0 /* PhotoKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7253B4B0244134C9003A40E0 /* PhotoKitManager.swift */; };
+		7253B4B42441397D003A40E0 /* Photo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7253B4B32441397D003A40E0 /* Photo.swift */; };
+		7253B4B624413A1F003A40E0 /* CoreData+Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7253B4B524413A1F003A40E0 /* CoreData+Extensions.swift */; };
+		7253B4B9244189F3003A40E0 /* PhotoCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7253B4B8244189F3003A40E0 /* PhotoCell.swift */; };
+		7253B4BC24418A23003A40E0 /* Cells+Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7253B4BB24418A23003A40E0 /* Cells+Extensions.swift */; };
+		7253B4BE24418B13003A40E0 /* Configurable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7253B4BD24418B13003A40E0 /* Configurable.swift */; };
+		7253B4C02442385F003A40E0 /* Sequence+Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7253B4BF2442385F003A40E0 /* Sequence+Extensions.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -68,6 +75,13 @@
 		7253B4A62441273F003A40E0 /* KeychainSwift.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = KeychainSwift.framework; path = Carthage/Build/iOS/KeychainSwift.framework; sourceTree = "<group>"; };
 		7253B4AA2441286A003A40E0 /* PhotosViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotosViewController.swift; sourceTree = "<group>"; };
 		7253B4AC24412A10003A40E0 /* UIBarButtonItem+Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "UIBarButtonItem+Extensions.swift"; sourceTree = "<group>"; };
+		7253B4B0244134C9003A40E0 /* PhotoKitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoKitManager.swift; sourceTree = "<group>"; };
+		7253B4B32441397D003A40E0 /* Photo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Photo.swift; sourceTree = "<group>"; };
+		7253B4B524413A1F003A40E0 /* CoreData+Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CoreData+Extensions.swift"; sourceTree = "<group>"; };
+		7253B4B8244189F3003A40E0 /* PhotoCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoCell.swift; sourceTree = "<group>"; };
+		7253B4BB24418A23003A40E0 /* Cells+Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Cells+Extensions.swift"; sourceTree = "<group>"; };
+		7253B4BD24418B13003A40E0 /* Configurable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Configurable.swift; sourceTree = "<group>"; };
+		7253B4BF2442385F003A40E0 /* Sequence+Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sequence+Extensions.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -105,13 +119,15 @@
 		7253B47824410931003A40E0 /* PhotoSync */ = {
 			isa = PBXGroup;
 			children = (
+				7253B4B224413924003A40E0 /* Models */,
+				7253B4AF244134B7003A40E0 /* Managers */,
+				7253B4B7244189E8003A40E0 /* Views */,
 				7253B4A9244127E6003A40E0 /* View Controllers */,
 				7253B49F2441237E003A40E0 /* Extensions */,
 				7253B47924410931003A40E0 /* AppDelegate.swift */,
 				7253B48524410933003A40E0 /* Assets.xcassets */,
 				7253B48724410933003A40E0 /* LaunchScreen.storyboard */,
 				7253B48A24410933003A40E0 /* Info.plist */,
-				7253B48224410931003A40E0 /* PhotoSync.xcdatamodeld */,
 			);
 			path = PhotoSync;
 			sourceTree = "<group>";
@@ -132,6 +148,10 @@
 				7253B49D24412379003A40E0 /* UIView+Extensions.swift */,
 				7253B4A124412487003A40E0 /* UIControl+Extensions.swift */,
 				7253B4AC24412A10003A40E0 /* UIBarButtonItem+Extensions.swift */,
+				7253B4B524413A1F003A40E0 /* CoreData+Extensions.swift */,
+				7253B4BB24418A23003A40E0 /* Cells+Extensions.swift */,
+				7253B4BD24418B13003A40E0 /* Configurable.swift */,
+				7253B4BF2442385F003A40E0 /* Sequence+Extensions.swift */,
 			);
 			path = Extensions;
 			sourceTree = "<group>";
@@ -152,6 +172,31 @@
 				7253B4AA2441286A003A40E0 /* PhotosViewController.swift */,
 			);
 			path = "View Controllers";
+			sourceTree = "<group>";
+		};
+		7253B4AF244134B7003A40E0 /* Managers */ = {
+			isa = PBXGroup;
+			children = (
+				7253B4B0244134C9003A40E0 /* PhotoKitManager.swift */,
+			);
+			path = Managers;
+			sourceTree = "<group>";
+		};
+		7253B4B224413924003A40E0 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				7253B4B32441397D003A40E0 /* Photo.swift */,
+				7253B48224410931003A40E0 /* PhotoSync.xcdatamodeld */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		7253B4B7244189E8003A40E0 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				7253B4B8244189F3003A40E0 /* PhotoCell.swift */,
+			);
+			path = Views;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -252,11 +297,18 @@
 			buildActionMask = 2147483647;
 			files = (
 				7253B47E24410931003A40E0 /* ConnectViewController.swift in Sources */,
+				7253B4BC24418A23003A40E0 /* Cells+Extensions.swift in Sources */,
+				7253B4C02442385F003A40E0 /* Sequence+Extensions.swift in Sources */,
 				7253B4AD24412A10003A40E0 /* UIBarButtonItem+Extensions.swift in Sources */,
+				7253B4B624413A1F003A40E0 /* CoreData+Extensions.swift in Sources */,
 				7253B48424410931003A40E0 /* PhotoSync.xcdatamodeld in Sources */,
+				7253B4B42441397D003A40E0 /* Photo.swift in Sources */,
 				7253B4A224412487003A40E0 /* UIControl+Extensions.swift in Sources */,
 				7253B4AB2441286A003A40E0 /* PhotosViewController.swift in Sources */,
+				7253B4BE24418B13003A40E0 /* Configurable.swift in Sources */,
+				7253B4B1244134C9003A40E0 /* PhotoKitManager.swift in Sources */,
 				7253B49E24412379003A40E0 /* UIView+Extensions.swift in Sources */,
+				7253B4B9244189F3003A40E0 /* PhotoCell.swift in Sources */,
 				7253B47A24410931003A40E0 /* AppDelegate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -394,7 +446,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = D9KHN33QB5;
+				DEVELOPMENT_TEAM = 76AFK3W7M9;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/Carthage/Build/iOS",
@@ -404,7 +456,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.tominsam.PhotoSync;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tominsam.photosync;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -416,7 +468,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = D9KHN33QB5;
+				DEVELOPMENT_TEAM = 76AFK3W7M9;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/Carthage/Build/iOS",
@@ -426,7 +478,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.tominsam.PhotoSync;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tominsam.photosync;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
