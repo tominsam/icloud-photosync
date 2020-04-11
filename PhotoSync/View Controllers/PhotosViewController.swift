@@ -64,15 +64,17 @@ class PhotosViewController: UIViewController {
             AppDelegate.shared.photoKitManager.sync()
         }
 
-        collectionView.pinEdgesTo(guide: view.safeAreaLayoutGuide)
+        collectionView.pinEdgesTo(view: view)
+        collectionView.contentInsetAdjustmentBehavior = .always
     }
 
     override func viewDidLayoutSubviews() {
         let width = collectionView.frame.width
-        let count = (width / 120).rounded(.down) // we want cells to be about this wide, so this is how many will fit.
+        let count = (width / 100).rounded(.down) // we want cells to be at least this wide, so this is how many will fit.
         let cell = width / count - (count - 1) // The width of the cell, allowing for spacing
         layout.itemSize = .init(width: cell, height: cell)
-        layout.minimumLineSpacing = (width - (cell * count)) / count // make the line spacing the same as the item spacing
+        NSLog("Cell wisth is \(cell) for screen width \(width)")
+        layout.minimumLineSpacing = (width - (cell * count)) / (count - 1) // make the line spacing the same as the item spacing
         layout.invalidateLayout()
     }
 

@@ -16,6 +16,7 @@ class PhotoCell: UICollectionViewCell, Reusable {
 
     lazy var imageView = UIImageView().configured {
         $0.contentMode = .scaleAspectFill
+        $0.backgroundColor = .secondarySystemGroupedBackground
         $0.clipsToBounds = true
         $0.tintColor = .label
     }
@@ -57,10 +58,11 @@ class PhotoCell: UICollectionViewCell, Reusable {
             asset = nil
         }
 
+        let config = UIImage.SymbolConfiguration(scale: .small)
         if photo.removedFromServer {
-            iconView.image = UIImage(systemName: "trash.fill")
+            iconView.image = UIImage(systemName: "trash.fill", withConfiguration: config)
         } else if asset?.isFavorite == true {
-            iconView.image = UIImage(systemName: "heart.fill")
+            iconView.image = UIImage(systemName: "heart.fill", withConfiguration: config)
         } else {
             iconView.image = nil
         }
@@ -68,14 +70,14 @@ class PhotoCell: UICollectionViewCell, Reusable {
         if let asset = asset {
             imageRequestId = PHImageManager.default().requestImage(for: asset, targetSize: contentView.frame.size, contentMode: .aspectFill, options: nil) { image, errors in
                 self.imageView.image = image
-                self.imageView.contentMode = .scaleAspectFill
-                self.imageView.backgroundColor = .white
+//                self.imageView.contentMode = .scaleAspectFill
+//                self.imageView.backgroundColor = .white
             }
         } else {
             //NSLog("Error loading asset \(photo.photoKitId ?? "<nil>")")
-            imageView.image = errorImage
-            imageView.contentMode = .center
-            imageView.backgroundColor = .secondarySystemGroupedBackground
+            imageView.image = nil
+//            imageView.contentMode = .center
+//            imageView.backgroundColor = .secondarySystemGroupedBackground
             imageRequestId = nil
         }
 
