@@ -10,6 +10,7 @@ import UIKit
 import CoreData
 import SwiftyDropbox
 import KeychainSwift
+import Photos
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -89,12 +90,28 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             }
 
             DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(2)) {
-                self.photoKitManager.sync()
+                self.startSync()
             }
 
         } else {
             dropboxClient = nil
             navigationController.viewControllers = [ConnectViewController()]
+        }
+    }
+
+    func startSync() {
+        switch PHPhotoLibrary.authorizationStatus() {
+        case .notDetermined:
+            PHPhotoLibrary.requestAuthorization { status in
+                DispatchQueue.main.async {
+                    self.startSync()
+                }
+            }
+        case .authorized:
+            photoKitManager.sync()
+        default:
+            // TODO
+            navigationController.present(UIAlertController(title: "Error", message: "Photo permission", preferredStyle: .alert), animated: true, completion: nil)
         }
     }
 
