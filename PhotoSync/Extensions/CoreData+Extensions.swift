@@ -30,9 +30,9 @@ extension ManagedObject {
         return request
     }
 
-    static func matching(predicate: String, args: [Any], in context: NSManagedObjectContext) -> [Self] {
-        let fetchRequest = self.fetch(with: NSPredicate(format: predicate, argumentArray: args))
-        return try! fetchRequest.execute()
+    static func matching(_ predicate: String? = nil, args: [Any] = [], in context: NSManagedObjectContext) -> [Self] {
+        let fetchRequest = self.fetch(with: NSPredicate(format: predicate ?? "1=1", argumentArray: args))
+        return try! context.fetch(fetchRequest)
     }
 }
 

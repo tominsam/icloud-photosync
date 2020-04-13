@@ -11,19 +11,23 @@ import Photos
 import CoreData
 
 extension NSNotification.Name {
-    static let PhotoKitManagerSyncComplete = NSNotification.Name("PhotoKitManagerSyncComplete")
     static let PhotoKitManagerSyncProgress = NSNotification.Name("PhotoKitManagerSyncProgress")
 }
 
 class PhotoKitManager: NSObject {
 
-    let persistentContainer = AppDelegate.shared.persistentContainer!
+    let persistentContainer = AppDelegate.shared.persistentContainer
 
     // Arbitrary identifier for this run
     //private let runIdentifier = UUID().uuidString
 
     // Lock so that we don't try to sync photos more than once at a time
-    public private(set) var syncing: Bool = false
+    enum State {
+        case notStarted
+        case syncing
+        case finished
+    }
+    public private(set) var state: State = .notStarted
     public let progress = Progress()
 
     // returns false if the user has explicitly denied photos permission
@@ -50,10 +54,14 @@ class PhotoKitManager: NSObject {
     }
 
     func sync() {
-        guard !syncing else { return }
-        syncing = true
+        assert(Thread.isMainThread)
+        if case .syncing = state {
+            NSLog("Already syncing photos")
+            return
+        }
+        state = .syncing
 
-        persistentContainer.performBackgroundTask { context in
+        persistentContainer.performBackgroundTask { [unowned self] context in
             let start = DispatchTime.now()
 
             let runIdentifier = UUID().uuidString
@@ -65,7 +73,7 @@ class PhotoKitManager: NSObject {
             let allPhotos = PHAsset.fetchAssets(with: allPhotosOptions)
 
             let count = allPhotos.count
-            NSLog("got \(count) photos")
+            NSLog("Phone has \(count) photo(s)")
 
             /*
              The PhotoKit API is very very fast - updating the Photo objects in code data is the bottleneck here.
@@ -91,8 +99,10 @@ class PhotoKitManager: NSObject {
                 }
 
                 if index % 10_000 == 0 {
-                    NSLog("Synced \(index) photos")
-                    DispatchQueue.main.async {
+                    if index > 0 {
+                        NSLog("Synced \(index) photos")
+                    }
+                    DispatchQueue.main.async { [unowned self] in
                         self.progress.completedUnitCount = Int64(index)
                         NotificationCenter.default.post(name: .PhotoKitManagerSyncProgress, object: self.progress)
                     }
@@ -107,7 +117,7 @@ class PhotoKitManager: NSObject {
             // and updating every photo we've seen in this sycn with that identifier. Therefore every
             // photo left in the database _without_ that run identifier wasn't seen this time, and has
             // been deleted since our last sync
-            let removed = Photo.matching(predicate: "syncRun != %@", args: [runIdentifier], in: context)
+            let removed = Photo.matching("syncRun != %@", args: [runIdentifier], in: context)
             if !removed.isEmpty {
                 NSLog("Removing \(removed.count) deleted photo(s)")
                 for photo in removed {
@@ -120,10 +130,10 @@ class PhotoKitManager: NSObject {
             let duration = Double(DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds) / 1_000_000_000
             NSLog("Synced %d photos in %0.1f seconds (%.0f per second)", count, duration, Double(count) / duration)
 
-            DispatchQueue.main.async {
-                self.syncing = false
+            DispatchQueue.main.async { [unowned self] in
+                self.state = .finished
                 self.progress.completedUnitCount = self.progress.totalUnitCount
-                NotificationCenter.default.post(name: .PhotoKitManagerSyncComplete, object: self.progress)
+                NotificationCenter.default.post(name: .PhotoKitManagerSyncProgress, object: self.progress)
             }
         }
     }

@@ -9,29 +9,50 @@
 import UIKit
 import CoreData
 import SwiftyDropbox
-import KeychainSwift
 import Photos
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
-    static let KeychainDropboxAccessToken = "KeychainDropboxAccessToken"
 
-    static var shared: AppDelegate { UIApplication.shared.delegate as! AppDelegate }
+    static var shared = UIApplication.shared.delegate as! AppDelegate
 
     lazy var window: UIWindow? = UIWindow()
     lazy var navigationController = UINavigationController()
 
-    lazy var keychain = KeychainSwift()
-    var persistentContainer: NSPersistentContainer?
+    lazy var persistentContainer: NSPersistentContainer = {
+        let persistentContainer = NSPersistentContainer(name: "PhotoSync")
+        // this completion handler is called synchonously by default
+        persistentContainer.loadPersistentStores(completionHandler: { _, error in
+            if let error = error as NSError? {
+                // If there's an error, just dump the database on the floor
+                let alert = UIAlertController.simpleAlert(title: "Database Error", message: error.localizedDescription, action: "Reset Database") { _ in
+                    // TODO this is the entire application support folder, it's way too destuctive and the app doesn't recover from this
+                    try! FileManager.default.removeItem(at: NSPersistentContainer.defaultDirectoryURL())
+                    persistentContainer.loadPersistentStores { _, error in
+                        if let error = error as NSError? {
+                            fatalError(error.localizedDescription)
+                        }
+                    }
+                }
+                self.navigationController.present(alert, animated: true, completion: nil)
+            }
+        })
+        persistentContainer.viewContext.automaticallyMergesChangesFromParent = true
+        return persistentContainer
+    }()
 
-    var dropboxClient: DropboxClient?
     lazy var photoKitManager = PhotoKitManager()
+    lazy var dropboxManager = DropboxManager()
+    lazy var syncManager = SyncManager()
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         DropboxClientsManager.setupWithAppKey("ru820t3myp7s6vk")
         window!.rootViewController = navigationController
         window!.makeKeyAndVisible()
-        loadPersistentStore()
+        navigationController.viewControllers = [StatusViewController()]
+        //navigationController.viewControllers = [PhotosViewController()]
+        updateDropboxNavigationItem()
+        startDropboxSync()
         return true
     }
 
@@ -39,7 +60,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         if let authResult = DropboxClientsManager.handleRedirectURL(url) {
             switch authResult {
             case .success(let accessToken):
-                logIn(accessToken: accessToken.accessToken)
+                self.dropboxManager.logIn(accessToken: accessToken.accessToken)
+                self.updateDropboxNavigationItem()
             case .cancel:
                 break
             case .error(_, let description):
@@ -50,61 +72,16 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     func applicationDidBecomeActive(_ application: UIApplication) {
-        startSync()
+        startPhotoSync()
     }
 
-    func loadPersistentStore() {
-        guard persistentContainer == nil else {
-            return
-        }
-
-        let persistentContainer = NSPersistentContainer(name: "PhotoSync")
-        persistentContainer.loadPersistentStores(completionHandler: { (storeDescription, error) in
-            if let error = error as NSError? {
-                let alert = UIAlertController.simpleAlert(title: "Database Error", message: error.localizedDescription, action: "OK") { _ in
-                    try! FileManager.default.removeItem(at: NSPersistentContainer.defaultDirectoryURL())
-                    self.loadPersistentStore()
-                }
-                self.navigationController.present(alert, animated: true, completion: nil)
-            } else {
-                persistentContainer.viewContext.automaticallyMergesChangesFromParent = true
-                self.persistentContainer = persistentContainer
-                self.updateViewController()
-            }
-        })
-    }
-
-    func updateViewController() {
-        
-        if let accessToken = keychain.get(Self.KeychainDropboxAccessToken) {
-            dropboxClient = DropboxClient(accessToken: accessToken)
-            navigationController.viewControllers = [PhotosViewController()]
-
-            // Check that we're still the user we think we are.
-            dropboxClient?.users.getCurrentAccount().response { _, error in
-                if case .authError = error {
-                    self.logOut()
-                }
-            }
-
-            DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(2)) {
-                self.startSync()
-            }
-
-        } else {
-            dropboxClient = nil
-            navigationController.viewControllers = [ConnectViewController()]
-        }
-    }
-
-    func startSync() {
-        guard persistentContainer != nil else { return }
-
+    func startPhotoSync() {
+        // Request photo access if we need it
         switch PHPhotoLibrary.authorizationStatus() {
         case .notDetermined:
             PHPhotoLibrary.requestAuthorization { status in
                 DispatchQueue.main.async {
-                    self.startSync()
+                    self.startPhotoSync()
                 }
             }
         case .authorized:
@@ -118,17 +95,27 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         }
     }
 
-    func logIn(accessToken: String) {
-        keychain.set(accessToken, forKey: Self.KeychainDropboxAccessToken)
-        updateViewController()
+    func startDropboxSync() {
+        dropboxManager.sync()
     }
 
-    func logOut() {
-        dropboxClient?.auth.tokenRevoke().response { _, _ in
-            // Don't actually care, this is best effort
+    func updateDropboxNavigationItem() {
+        let item: UIBarButtonItem
+        if dropboxManager.isLoggedIn {
+            item = UIBarButtonItem(title: "Log out", action: {
+                self.dropboxManager.logOut()
+                self.updateDropboxNavigationItem()
+            })
+        } else {
+            item = UIBarButtonItem(title: "Connect to Dropbox", action: {
+                DropboxClientsManager.authorizeFromController(
+                    UIApplication.shared,
+                    controller: self.navigationController,
+                    openURL: { UIApplication.shared.open($0, options: [:], completionHandler: nil) })
+            })
         }
-        keychain.delete(Self.KeychainDropboxAccessToken)
-        updateViewController()
+
+        navigationController.viewControllers.first?.navigationItem.rightBarButtonItem = item
     }
 
 }

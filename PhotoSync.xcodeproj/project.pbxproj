@@ -8,7 +8,6 @@
 
 /* Begin PBXBuildFile section */
 		7253B47A24410931003A40E0 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7253B47924410931003A40E0 /* AppDelegate.swift */; };
-		7253B47E24410931003A40E0 /* ConnectViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7253B47D24410931003A40E0 /* ConnectViewController.swift */; };
 		7253B48424410931003A40E0 /* PhotoSync.xcdatamodeld in Sources */ = {isa = PBXBuildFile; fileRef = 7253B48224410931003A40E0 /* PhotoSync.xcdatamodeld */; };
 		7253B48624410933003A40E0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7253B48524410933003A40E0 /* Assets.xcassets */; };
 		7253B48924410933003A40E0 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 7253B48724410933003A40E0 /* LaunchScreen.storyboard */; };
@@ -30,7 +29,11 @@
 		7253B4BC24418A23003A40E0 /* Cells+Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7253B4BB24418A23003A40E0 /* Cells+Extensions.swift */; };
 		7253B4BE24418B13003A40E0 /* Configurable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7253B4BD24418B13003A40E0 /* Configurable.swift */; };
 		7253B4C02442385F003A40E0 /* Sequence+Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7253B4BF2442385F003A40E0 /* Sequence+Extensions.swift */; };
+		7253B4C224426A06003A40E0 /* DropboxManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7253B4C124426A06003A40E0 /* DropboxManager.swift */; };
 		7253B4C424427AA8003A40E0 /* Alert+Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7253B4C324427AA8003A40E0 /* Alert+Extensions.swift */; };
+		7253B4C62442AF21003A40E0 /* DropboxFile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7253B4C52442AF21003A40E0 /* DropboxFile.swift */; };
+		7253B4C82442E34A003A40E0 /* SyncManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7253B4C72442E34A003A40E0 /* SyncManager.swift */; };
+		7259916E24442A5A0049127C /* StatusViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7259916D24442A5A0049127C /* StatusViewController.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -62,7 +65,6 @@
 /* Begin PBXFileReference section */
 		7253B47624410931003A40E0 /* PhotoSync.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PhotoSync.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7253B47924410931003A40E0 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
-		7253B47D24410931003A40E0 /* ConnectViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectViewController.swift; sourceTree = "<group>"; };
 		7253B48324410931003A40E0 /* PhotoSync.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = PhotoSync.xcdatamodel; sourceTree = "<group>"; };
 		7253B48524410933003A40E0 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		7253B48824410933003A40E0 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
@@ -83,7 +85,11 @@
 		7253B4BB24418A23003A40E0 /* Cells+Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Cells+Extensions.swift"; sourceTree = "<group>"; };
 		7253B4BD24418B13003A40E0 /* Configurable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Configurable.swift; sourceTree = "<group>"; };
 		7253B4BF2442385F003A40E0 /* Sequence+Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sequence+Extensions.swift"; sourceTree = "<group>"; };
+		7253B4C124426A06003A40E0 /* DropboxManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropboxManager.swift; sourceTree = "<group>"; };
 		7253B4C324427AA8003A40E0 /* Alert+Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Alert+Extensions.swift"; sourceTree = "<group>"; };
+		7253B4C52442AF21003A40E0 /* DropboxFile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropboxFile.swift; sourceTree = "<group>"; };
+		7253B4C72442E34A003A40E0 /* SyncManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncManager.swift; sourceTree = "<group>"; };
+		7259916D24442A5A0049127C /* StatusViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusViewController.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -171,8 +177,8 @@
 		7253B4A9244127E6003A40E0 /* View Controllers */ = {
 			isa = PBXGroup;
 			children = (
-				7253B47D24410931003A40E0 /* ConnectViewController.swift */,
 				7253B4AA2441286A003A40E0 /* PhotosViewController.swift */,
+				7259916D24442A5A0049127C /* StatusViewController.swift */,
 			);
 			path = "View Controllers";
 			sourceTree = "<group>";
@@ -181,6 +187,8 @@
 			isa = PBXGroup;
 			children = (
 				7253B4B0244134C9003A40E0 /* PhotoKitManager.swift */,
+				7253B4C124426A06003A40E0 /* DropboxManager.swift */,
+				7253B4C72442E34A003A40E0 /* SyncManager.swift */,
 			);
 			path = Managers;
 			sourceTree = "<group>";
@@ -189,6 +197,7 @@
 			isa = PBXGroup;
 			children = (
 				7253B4B32441397D003A40E0 /* Photo.swift */,
+				7253B4C52442AF21003A40E0 /* DropboxFile.swift */,
 				7253B48224410931003A40E0 /* PhotoSync.xcdatamodeld */,
 			);
 			path = Models;
@@ -299,8 +308,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				7253B47E24410931003A40E0 /* ConnectViewController.swift in Sources */,
 				7253B4BC24418A23003A40E0 /* Cells+Extensions.swift in Sources */,
+				7253B4C224426A06003A40E0 /* DropboxManager.swift in Sources */,
 				7253B4C02442385F003A40E0 /* Sequence+Extensions.swift in Sources */,
 				7253B4C424427AA8003A40E0 /* Alert+Extensions.swift in Sources */,
 				7253B4AD24412A10003A40E0 /* UIBarButtonItem+Extensions.swift in Sources */,
@@ -309,10 +318,13 @@
 				7253B4B42441397D003A40E0 /* Photo.swift in Sources */,
 				7253B4A224412487003A40E0 /* UIControl+Extensions.swift in Sources */,
 				7253B4AB2441286A003A40E0 /* PhotosViewController.swift in Sources */,
+				7253B4C62442AF21003A40E0 /* DropboxFile.swift in Sources */,
 				7253B4BE24418B13003A40E0 /* Configurable.swift in Sources */,
 				7253B4B1244134C9003A40E0 /* PhotoKitManager.swift in Sources */,
 				7253B49E24412379003A40E0 /* UIView+Extensions.swift in Sources */,
 				7253B4B9244189F3003A40E0 /* PhotoCell.swift in Sources */,
+				7253B4C82442E34A003A40E0 /* SyncManager.swift in Sources */,
+				7259916E24442A5A0049127C /* StatusViewController.swift in Sources */,
 				7253B47A24410931003A40E0 /* AppDelegate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

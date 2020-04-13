@@ -51,12 +51,7 @@ class PhotoCell: UICollectionViewCell, Reusable {
             PHImageManager.default().cancelImageRequest(id)
         }
 
-        let asset: PHAsset?
-        if let id = photo.photoKitId {
-            asset = PHAsset.fetchAssets(withLocalIdentifiers: [id], options: nil).firstObject
-        } else {
-            asset = nil
-        }
+        let asset = PHAsset.fetchAssets(withLocalIdentifiers: [photo.photoKitId], options: nil).firstObject
 
         let config = UIImage.SymbolConfiguration(scale: .small)
         if photo.removedFromServer {
@@ -70,14 +65,9 @@ class PhotoCell: UICollectionViewCell, Reusable {
         if let asset = asset {
             imageRequestId = PHImageManager.default().requestImage(for: asset, targetSize: contentView.frame.size, contentMode: .aspectFill, options: nil) { image, errors in
                 self.imageView.image = image
-//                self.imageView.contentMode = .scaleAspectFill
-//                self.imageView.backgroundColor = .white
             }
         } else {
-            //NSLog("Error loading asset \(photo.photoKitId ?? "<nil>")")
             imageView.image = nil
-//            imageView.contentMode = .center
-//            imageView.backgroundColor = .secondarySystemGroupedBackground
             imageRequestId = nil
         }
 

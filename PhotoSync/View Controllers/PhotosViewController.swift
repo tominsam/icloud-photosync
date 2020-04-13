@@ -14,7 +14,7 @@ class PhotosViewController: UIViewController {
 
     lazy var fetchedResultsController = NSFetchedResultsController<Photo>(
         fetchRequest: Photo.fetch(),
-        managedObjectContext: AppDelegate.shared.persistentContainer!.viewContext,
+        managedObjectContext: AppDelegate.shared.persistentContainer.viewContext,
         sectionNameKeyPath: nil,
         cacheName: nil).configured {
             // One note here - we do _not_ set a delegate on this object! We change thousands
@@ -49,12 +49,8 @@ class PhotosViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
 
-        NotificationCenter.default.addObserver(self, selector: #selector(syncComplete), name: .PhotoKitManagerSyncComplete, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(syncProgress(_:)), name: .PhotoKitManagerSyncProgress, object: nil)
-
-        navigationItem.rightBarButtonItem = UIBarButtonItem(title: "Log out", action: {
-            AppDelegate.shared.logOut()
-        })
+        NotificationCenter.default.addObserver(self, selector: #selector(syncProgress(_:)), name: .SyncManagerSyncProgress, object: nil)
 
         view.addSubviewWithConstraints(collectionView)
         collectionView.refreshControl = refreshControl
@@ -62,10 +58,15 @@ class PhotosViewController: UIViewController {
         refreshControl.addAction(for: .valueChanged) { [weak self] in
             self?.refreshControl.attributedTitle = NSAttributedString(string: " ")
             AppDelegate.shared.photoKitManager.sync()
+            AppDelegate.shared.dropboxManager.sync()
         }
 
         collectionView.pinEdgesTo(view: view)
         collectionView.contentInsetAdjustmentBehavior = .always
+
+        navigationItem.leftBarButtonItem = UIBarButtonItem(title: "Sync") {
+            AppDelegate.shared.syncManager.sync()
+        }
     }
 
     override func viewDidLayoutSubviews() {
@@ -73,37 +74,35 @@ class PhotosViewController: UIViewController {
         let count = (width / 100).rounded(.down) // we want cells to be at least this wide, so this is how many will fit.
         let cell = width / count - (count - 1) // The width of the cell, allowing for spacing
         layout.itemSize = .init(width: cell, height: cell)
-        NSLog("Cell wisth is \(cell) for screen width \(width)")
         layout.minimumLineSpacing = (width - (cell * count)) / (count - 1) // make the line spacing the same as the item spacing
         layout.invalidateLayout()
     }
 
     @objc func syncProgress(_ notification: Notification) {
-        if let progress = notification.object as? Progress {
-            NSLog("Sync progress is \(progress)")
+        guard let progress = notification.object as? Progress else { return }
+
+        if progress.completedUnitCount >= progress.totalUnitCount {
+            // complete
+            try! fetchedResultsController.performFetch()
+            collectionView.reloadData()
+            refreshControl.endRefreshing()
+        } else {
             if !refreshControl.isRefreshing {
                 refreshControl.beginRefreshing()
             }
             refreshControl.attributedTitle = NSAttributedString(string: String(format: "%0.0f%% complete", progress.fractionCompleted * 100))
         }
 
-        // Not going to update every time, but we'll load in the first page,
-        // because that'll be the most recently added photos. Anything we
-        // pull in later will almost certainly not be visible and I don't want
-        // the jank.
         if fetchedResultsController.fetchedObjects?.count == 0 {
+            // Not going to update every time, but we'll load in the first page,
+            // because that'll be the most recently added photos. Anything we
+            // pull in later will almost certainly not be visible and I don't want
+            // the jank.
             try! fetchedResultsController.performFetch()
             collectionView.reloadData()
         }
     }
 
-    @objc func syncComplete() {
-        NSLog("Sync complete")
-        try! fetchedResultsController.performFetch()
-        collectionView.reloadData()
-        refreshControl.endRefreshing()
-        refreshControl.attributedTitle = nil
-    }
 }
 
 extension PhotosViewController: UICollectionViewDelegate, UICollectionViewDataSource {

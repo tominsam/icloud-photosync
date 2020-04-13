@@ -1,7 +1,21 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="16119" systemVersion="19E266" minimumToolsVersion="Automatic" sourceLanguage="Swift" userDefinedModelVersionIdentifier="">
-    <entity name="Photo" representedClassName="Photo" syncable="YES" codeGenerationType="class">
+    <entity name="DropboxFile" representedClassName="DropboxFile" syncable="YES">
+        <attribute name="dropboxId" optional="YES" attributeType="String"/>
+        <attribute name="modified" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="path" optional="YES" attributeType="String"/>
+        <attribute name="rev" optional="YES" attributeType="String"/>
+        <attribute name="syncRun" optional="YES" attributeType="String"/>
+        <uniquenessConstraints>
+            <uniquenessConstraint>
+                <constraint value="dropboxId"/>
+            </uniquenessConstraint>
+        </uniquenessConstraints>
+    </entity>
+    <entity name="Photo" representedClassName="Photo" syncable="YES">
         <attribute name="created" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="dropboxId" optional="YES" attributeType="String"/>
+        <attribute name="dropboxRev" optional="YES" attributeType="String"/>
         <attribute name="modified" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="photoKitId" attributeType="String"/>
         <attribute name="removedFromServer" optional="YES" attributeType="Boolean" usesScalarValueType="YES"/>
@@ -13,6 +27,7 @@
         </uniquenessConstraints>
     </entity>
     <elements>
-        <element name="Photo" positionX="-63" positionY="-18" width="128" height="118"/>
+        <element name="DropboxFile" positionX="-54" positionY="27" width="128" height="118"/>
+        <element name="Photo" positionX="-63" positionY="-18" width="128" height="148"/>
     </elements>
 </model>
