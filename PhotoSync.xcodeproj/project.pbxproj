@@ -34,6 +34,7 @@
 		7253B4C62442AF21003A40E0 /* DropboxFile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7253B4C52442AF21003A40E0 /* DropboxFile.swift */; };
 		7253B4C82442E34A003A40E0 /* SyncManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7253B4C72442E34A003A40E0 /* SyncManager.swift */; };
 		7259916E24442A5A0049127C /* StatusViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7259916D24442A5A0049127C /* StatusViewController.swift */; };
+		72599170244438090049127C /* BatchUploadOperation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7259916F244438090049127C /* BatchUploadOperation.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -90,6 +91,7 @@
 		7253B4C52442AF21003A40E0 /* DropboxFile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropboxFile.swift; sourceTree = "<group>"; };
 		7253B4C72442E34A003A40E0 /* SyncManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncManager.swift; sourceTree = "<group>"; };
 		7259916D24442A5A0049127C /* StatusViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusViewController.swift; sourceTree = "<group>"; };
+		7259916F244438090049127C /* BatchUploadOperation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatchUploadOperation.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -189,6 +191,7 @@
 				7253B4B0244134C9003A40E0 /* PhotoKitManager.swift */,
 				7253B4C124426A06003A40E0 /* DropboxManager.swift */,
 				7253B4C72442E34A003A40E0 /* SyncManager.swift */,
+				7259916F244438090049127C /* BatchUploadOperation.swift */,
 			);
 			path = Managers;
 			sourceTree = "<group>";
@@ -316,6 +319,7 @@
 				7253B4B624413A1F003A40E0 /* CoreData+Extensions.swift in Sources */,
 				7253B48424410931003A40E0 /* PhotoSync.xcdatamodeld in Sources */,
 				7253B4B42441397D003A40E0 /* Photo.swift in Sources */,
+				72599170244438090049127C /* BatchUploadOperation.swift in Sources */,
 				7253B4A224412487003A40E0 /* UIControl+Extensions.swift in Sources */,
 				7253B4AB2441286A003A40E0 /* PhotosViewController.swift in Sources */,
 				7253B4C62442AF21003A40E0 /* DropboxFile.swift in Sources */,

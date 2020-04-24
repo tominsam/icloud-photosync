@@ -17,9 +17,6 @@ extension NSNotification.Name {
 class SyncManager: NSObject {
     private let persistentContainer = AppDelegate.shared.persistentContainer
 
-    private var dropboxManager = AppDelegate.shared.dropboxManager
-    private var photoKitManager = AppDelegate.shared.photoKitManager
-
     var errors: [String] = []
 
     let operationQueue = OperationQueue().configured {
@@ -38,10 +35,10 @@ class SyncManager: NSObject {
     public private(set) var state: State = .notStarted
 
     var canSync: Bool {
-        guard case .finished = dropboxManager.state else {
+        guard case .finished = AppDelegate.shared.dropboxManager.state else {
             return false
         }
-        guard case .finished = photoKitManager.state else {
+        guard case .finished = AppDelegate.shared.photoKitManager.state else {
             return false
         }
         if case .syncing = state {
@@ -68,15 +65,11 @@ class SyncManager: NSObject {
         self.state = .syncing
         self.errors.removeAll()
         // First cut estimate
-        self.operationQueue.progress.totalUnitCount = Int64(Photo.matching(in: persistentContainer.viewContext).count)
+        self.operationQueue.progress.totalUnitCount = Int64(Photo.count(in: persistentContainer.viewContext))
         NotificationCenter.default.post(name: .PhotoKitManagerSyncProgress, object: operationQueue.progress)
 
         persistentContainer.performBackgroundTask { [unowned self] context in
             var count = 0
-
-            DispatchQueue.main.async {
-                self.logError(error: "goo")
-            }
 
             // Walk through the photo database in chunks, it's much faster to fetch the
             // corresponding assets and dropbox files like this.
@@ -87,10 +80,12 @@ class SyncManager: NSObject {
                 let rawAssets = PHAsset.fetchAssets(withLocalIdentifiers: chunk.map { $0.photoKitId }, options: nil)
                 let assets = (0..<rawAssets.count).map { rawAssets.object(at: $0) }.uniqueBy(\.localIdentifier)
 
-                for photo in chunk {
+                let photosForUpload: [PHAsset] = chunk.compactMap { photo in
+
+                    // If we're uploaded the file in the past, this is the file in dropbox that should represent it
                     let dropboxFile = photo.dropboxId == nil ? nil : dropboxFiles[photo.dropboxId!]
 
-                    // If there photo is deleted locally, make sure it's also not in dropbox
+                    // If the photo is deleted locally, make sure it's also not in dropbox
                     guard let asset = assets[photo.photoKitId] else {
                         if let dropboxFile = dropboxFile, let path = dropboxFile.path {
                             self.operationQueue.addOperation(DeleteOperation(photoKitId: photo.photoKitId, path: path, rev: dropboxFile.rev))
@@ -100,24 +95,27 @@ class SyncManager: NSObject {
                             context.delete(photo)
                             try! context.save()
                         }
-                        continue
+                        // Doesn't need uploading
+                        return nil
                     }
 
-                    if let dropboxFile = dropboxFile, photo.dropboxRev == dropboxFile.rev {
-                        // Local file rev matches dropbox file rev, so we can assume it's unchanged.
-                        continue
+                    if let dropboxFile = dropboxFile, photo.dropboxRev == dropboxFile.rev, photo.modified == photo.dropboxModified {
+                        // Local file rev matches dropbox file rev and has not been changed locally, so we can assume it's unchanged.
+                        return nil
                     }
 
                     // Images only for now
                     switch asset.mediaType {
                     case .image:
-                        self.operationQueue.addOperation(UploadOperation(asset: asset))
                         count += 1
+                        return asset
                     default:
-                        NSLog("Skipping media type \(asset.mediaType)")
-                        break
+                        //NSLog("Skipping media type \(asset.mediaType)")
+                        return nil
                     }
                 }
+
+                self.operationQueue.addOperation(BatchUploadOperation(assets: photosForUpload))
 
             }
 
@@ -175,80 +173,6 @@ extension Operation {
     }
 }
 
-
-
-class UploadOperation: Operation {
-    let asset: PHAsset
-
-    init(asset: PHAsset) {
-        self.asset = asset
-        super.init()
-    }
-
-    override func main() {
-        guard !isCancelled else { return }
-
-        // Get original asset data from photokit
-        let manager = PHImageManager.default()
-        let options = PHImageRequestOptions()
-        options.deliveryMode = .highQualityFormat
-        options.version = .current // save out edited versions
-        options.isSynchronous = true
-        manager.requestImageDataAndOrientation(for: asset, options: options) { [unowned self] data, uti, orientation, info in
-            NSLog("Got original for \(self.asset.localIdentifier)")
-            guard !self.isCancelled else {
-                return
-            }
-
-            guard let data = data, let uti = uti else {
-                self.logError(error: "Failed to fetch image \(self.asset.localIdentifier)")
-                return
-            }
-
-            // TODO Need to handle duplicate filenames in a month and yet still be able to overwrite
-            // remote files that were changed outside of this client
-            let path = self.asset.wantedDropboxPath(uti: uti)
-            self.upload(data: data, to: path, modified: self.asset.creationDate ?? self.asset.modificationDate)
-        }
-        logProgress()
-    }
-
-    func upload(data: Data, to path: String, modified: Date?) {
-        let sema = DispatchSemaphore(value: 0)
-        NSLog("Uploading to \(path)")
-
-        AppDelegate.shared.dropboxManager.dropboxClient?.files.upload(path: path, mode: .overwrite, clientModified: modified, input: data).response { file, error in
-
-            guard !self.isCancelled else {
-                sema.signal()
-                return
-            }
-
-            if let error = error {
-                self.logError(path: path, error: error)
-            } else if let file = file {
-                NSLog("Uploaded \(path)")
-                let context = AppDelegate.shared.persistentContainer.viewContext
-                if let photo = Photo.matching("photoKitId = %@", args: [self.asset.localIdentifier], in: context).first {
-                    photo.dropboxId = file.id
-                    photo.dropboxRev = file.rev
-                    DropboxFile.insertOrUpdate([file], syncRun: "", into: context)
-                    try! photo.managedObjectContext!.save()
-                } else {
-                    fatalError("No photo for local identifier \(self.asset.localIdentifier)")
-                }
-            }
-            sema.signal()
-
-        }
-
-        _ = sema.wait(timeout: .distantFuture)
-        logProgress()
-    }
-
-}
-
-
 class DeleteOperation: Operation {
     let photoKitId: String
     let path: String
@@ -286,22 +210,3 @@ class DeleteOperation: Operation {
 }
 
 
-fileprivate extension PHAsset {
-    func wantedDropboxPath(uti: String) -> String {
-
-        let datePath: String
-        if let creationDate = self.creationDate {
-            let dateFormatter = DateFormatter()
-            dateFormatter.dateFormat = "yyyy/MM"
-            dateFormatter.timeZone = TimeZone(identifier: "UTC")
-            datePath = dateFormatter.string(from: creationDate)
-        } else {
-            // no creation date?
-            datePath = "No date"
-        }
-
-        let filename = (PHAssetResource.assetResources(for: self).first(where: { $0.type == .photo || $0.type == .video })?.originalFilename)!
-
-        return "/\(datePath)/\(filename)"
-    }
-}

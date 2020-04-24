@@ -15,6 +15,7 @@
     <entity name="Photo" representedClassName="Photo" syncable="YES">
         <attribute name="created" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="dropboxId" optional="YES" attributeType="String"/>
+        <attribute name="dropboxModified" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="dropboxRev" optional="YES" attributeType="String"/>
         <attribute name="modified" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="photoKitId" attributeType="String"/>
@@ -28,6 +29,6 @@
     </entity>
     <elements>
         <element name="DropboxFile" positionX="-54" positionY="27" width="128" height="118"/>
-        <element name="Photo" positionX="-63" positionY="-18" width="128" height="148"/>
+        <element name="Photo" positionX="-63" positionY="-18" width="128" height="163"/>
     </elements>
 </model>

@@ -77,7 +77,7 @@ class DropboxManager: NSObject {
         }
         if case .syncing = state { return }
         state = .syncing
-        progress.totalUnitCount = Int64(DropboxFile.matching(in: persistentContainer.viewContext).count)
+        progress.totalUnitCount = Int64(DropboxFile.count(in: persistentContainer.viewContext))
         progress.completedUnitCount = 0
 
         let runIdentifier = UUID().uuidString
@@ -136,7 +136,7 @@ class DropboxManager: NSObject {
             self.progress.completedUnitCount += Int64(fileMetadata.count)
             self.progress.totalUnitCount = max(
                 self.progress.totalUnitCount,
-                Int64(DropboxFile.matching(in: context).count))
+                Int64(DropboxFile.count(in: context)))
 
             DispatchQueue.main.async { [unowned self] in
                 NotificationCenter.default.post(name: .PhotoKitManagerSyncProgress, object: self.progress)

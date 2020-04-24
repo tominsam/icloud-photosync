@@ -34,6 +34,11 @@ extension ManagedObject {
         let fetchRequest = self.fetch(with: NSPredicate(format: predicate ?? "1=1", argumentArray: args))
         return try! context.fetch(fetchRequest)
     }
+
+    static func count(_ predicate: String? = nil, args: [Any] = [], in context: NSManagedObjectContext) -> Int {
+        let fetchRequest = self.fetch(with: NSPredicate(format: predicate ?? "1=1", argumentArray: args))
+        return try! context.count(for: fetchRequest)
+    }
 }
 
 extension NSManagedObject {
