@@ -15,17 +15,22 @@ import Photos
 // even though it's much more complicated, because Dropbox has internal transaction / locking that effectively
 // prevent me uploading more than one file at once.
 class BatchUploadOperation: Operation {
+    struct UploadTask {
+        let asset: PHAsset
+        let existingContentHash: String?
+    }
 
     // Internal operation queue to manage parallelization.
     let operationQueue = OperationQueue().configured {
         $0.maxConcurrentOperationCount = 3
     }
 
-    // The assets to upload
-    let assets: [PHAsset]
+    // The upload operations.
+    let operations: [UploadStartOperation]
 
-    init(assets: [PHAsset]) {
-        self.assets = assets
+    init(tasks: [UploadTask]) {
+        // by doing this in the constructor, the progress objects are properly reporting to the parent
+        self.operations = tasks.map { UploadStartOperation(task: $0) }
         super.init()
     }
 
@@ -35,16 +40,17 @@ class BatchUploadOperation: Operation {
         let sema = DispatchSemaphore(value: 0)
 
         // Queue all the assets for upload
-        let operations = assets.map { UploadStartOperation(asset: $0) }
         operationQueue.addOperations(operations, waitUntilFinished: false)
 
         // Once all the uploads are done, collect the results and make a single call to dropbox that closes the transaction.
         operationQueue.addBarrierBlock {
             // Map the operation results into the data structure that uploadSessionFinishBatch expects
-            let finishEntries: [Files.UploadSessionFinishArg] = operations.map { operation in
-                let cursor = Files.UploadSessionCursor(sessionId: operation.result!.sessionId, offset: operation.bytes)
-                let commitInfo = Files.CommitInfo(path: operation.asset.dropboxPath, mode: .overwrite, autorename: false, clientModified: operation.asset.creationDate ?? operation.asset.modificationDate)
-                return Files.UploadSessionFinishArg(cursor: cursor, commit: commitInfo)
+            let finishEntries = self.operations.compactMap { $0.finishEntry }
+            guard !finishEntries.isEmpty else {
+                // Everything in the batch was already on dropbox
+                NSLog("Nothing to upload")
+                sema.signal()
+                return
             }
 
             NSLog("Finishing \(finishEntries.count) uploads")
@@ -53,7 +59,7 @@ class BatchUploadOperation: Operation {
                 if let result = result {
                     switch result {
                     case .asyncJobId(let jobId):
-                        DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(1)) {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(3)) {
                             self.checkJob(jobId: jobId, sema: sema)
                         }
                     case .complete(let complete):
@@ -75,7 +81,7 @@ class BatchUploadOperation: Operation {
             if let status = status {
                 switch status {
                 case .inProgress:
-                    DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(1)) {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(2)) {
                         self.checkJob(jobId: jobId, sema: sema)
                     }
                 case .complete(let result):
@@ -93,15 +99,11 @@ class BatchUploadOperation: Operation {
         // Now we've uploaded all the files, we can connect them to the original assets in core data.
         NSLog("Complete")
         // Really need better error handling
-        assert(batchResult.entries.count == assets.count)
         AppDelegate.shared.persistentContainer.performBackgroundTask { context in
-            let photos = Photo.insertOrUpdate(self.assets, syncRun: "", into: context)
-            for (photo, result) in zip(photos, batchResult.entries) {
+            Photo.insertOrUpdate(self.operations.map { $0.task.asset }, syncRun: "", into: context)
+            for result in batchResult.entries {
                 switch result {
                 case .success(let fileMetadata):
-                    photo.dropboxId = fileMetadata.id
-                    photo.dropboxRev = fileMetadata.rev
-                    photo.dropboxModified = photo.modified // so we can detect local changes
                     DropboxFile.insertOrUpdate([fileMetadata], syncRun: "", into: context)
                 default:
                     fatalError()
@@ -118,19 +120,29 @@ class BatchUploadOperation: Operation {
 // Fetches a PHAsset from iCloud and pushes it to Dropbox as part of a batch start
 class UploadStartOperation: Operation {
     // What to push
-    let asset: PHAsset
+    let task: BatchUploadOperation.UploadTask
+    let progress: Progress
 
     // The thing that was pushed
     var result: Files.UploadSessionStartResult?
     var bytes: UInt64 = 0
 
-    init(asset: PHAsset) {
-        self.asset = asset
+    init(task: BatchUploadOperation.UploadTask) {
+        self.task = task
+        self.progress = Progress(totalUnitCount: 1)
         super.init()
     }
 
     override func main() {
         guard !isCancelled else { return }
+
+        switch task.asset.mediaType {
+        case .image:
+            break
+        default:
+            NSLog("Skipping media type \(task.asset.mediaType.rawValue)")
+            return
+        }
 
         // Get original asset data from photokit
         let manager = PHImageManager.default()
@@ -138,19 +150,33 @@ class UploadStartOperation: Operation {
         options.deliveryMode = .highQualityFormat
         options.version = .current // save out edited versions
         options.isSynchronous = true // block operation
-        manager.requestImageDataAndOrientation(for: asset, options: options) { [unowned self] data, uti, orientation, info in
+        manager.requestImageDataAndOrientation(for: task.asset, options: options) { [unowned self] data, uti, orientation, info in
             guard !self.isCancelled else { return }
 
-            NSLog("Got original for \(self.asset.localIdentifier)")
-
-            guard let data = data else {
-                self.logError(error: "Failed to fetch image \(self.asset.localIdentifier)")
+            guard let data = data, let hash = data.dropboxContentHash() else {
+                self.logError(error: "Failed to fetch image \(self.task.asset.dropboxPath)")
                 return
             }
 
-            // Blocking call that uploads to dropbox and counts the bytes
-            self.upload(data: data)
+            // Store the content hash on the database object before we start the upload
+            let context = AppDelegate.shared.persistentContainer.newBackgroundContext()
+            context.performAndWait {
+                if let photo = Photo.forAsset(self.task.asset, in: context) {
+                    photo.contentHash = hash
+                    photo.pathLower = self.task.asset.dropboxPath.localizedLowercase
+                    try! context.save()
+                }
+            }
+
+            // Skip the upload if possible
+            if self.task.existingContentHash != hash {
+                // Blocking call that uploads to dropbox and counts the bytes
+                NSLog("Uploading \(self.task.asset.dropboxPath)")
+                self.upload(data: data)
+            }
         }
+
+        progress.completedUnitCount = progress.totalUnitCount
         logProgress()
     }
 
@@ -164,24 +190,16 @@ class UploadStartOperation: Operation {
         _ = sema.wait(timeout: .distantFuture)
     }
 
-}
-
-
-fileprivate extension PHAsset {
-    var dropboxPath: String {
-
-        let datePath: String
-        if let creationDate = self.creationDate {
-            let dateFormatter = DateFormatter()
-            dateFormatter.dateFormat = "yyyy/MM"
-            dateFormatter.timeZone = TimeZone(identifier: "UTC")
-            datePath = dateFormatter.string(from: creationDate)
-        } else {
-            // no creation date?
-            datePath = "No date"
+    /// returns the dropbox batch upload finish argument object, which we use to close out the upload
+    var finishEntry: Files.UploadSessionFinishArg? {
+        guard let result = result else {
+            return nil
         }
-
-        let filename = (PHAssetResource.assetResources(for: self).first(where: { $0.type == .photo || $0.type == .video })?.originalFilename)!
-        return "/\(datePath)/\(filename)"
+        let cursor = Files.UploadSessionCursor(sessionId: result.sessionId, offset: bytes)
+        let commitInfo = Files.CommitInfo(path: task.asset.dropboxPath, mode: .overwrite, autorename: false, clientModified: task.asset.creationDate ?? task.asset.modificationDate)
+        return Files.UploadSessionFinishArg(cursor: cursor, commit: commitInfo)
     }
+
 }
+
+

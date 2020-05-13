@@ -35,6 +35,9 @@
 		7253B4C82442E34A003A40E0 /* SyncManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7253B4C72442E34A003A40E0 /* SyncManager.swift */; };
 		7259916E24442A5A0049127C /* StatusViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7259916D24442A5A0049127C /* StatusViewController.swift */; };
 		72599170244438090049127C /* BatchUploadOperation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7259916F244438090049127C /* BatchUploadOperation.swift */; };
+		726E6856246A30990020E041 /* Data+Extension.swift in Sources */ = {isa = PBXBuildFile; fileRef = 726E6855246A30990020E041 /* Data+Extension.swift */; };
+		726E6859246B616F0020E041 /* TimezoneMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 726E6858246B616F0020E041 /* TimezoneMapper.swift */; };
+		726E685B246B62BA0020E041 /* DeleteOperation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 726E685A246B62BA0020E041 /* DeleteOperation.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -92,6 +95,9 @@
 		7253B4C72442E34A003A40E0 /* SyncManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncManager.swift; sourceTree = "<group>"; };
 		7259916D24442A5A0049127C /* StatusViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusViewController.swift; sourceTree = "<group>"; };
 		7259916F244438090049127C /* BatchUploadOperation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatchUploadOperation.swift; sourceTree = "<group>"; };
+		726E6855246A30990020E041 /* Data+Extension.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Data+Extension.swift"; sourceTree = "<group>"; };
+		726E6858246B616F0020E041 /* TimezoneMapper.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = TimezoneMapper.swift; sourceTree = "<group>"; };
+		726E685A246B62BA0020E041 /* DeleteOperation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeleteOperation.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -135,6 +141,7 @@
 				7253B4A9244127E6003A40E0 /* View Controllers */,
 				7253B49F2441237E003A40E0 /* Extensions */,
 				7253B47924410931003A40E0 /* AppDelegate.swift */,
+				726E6857246B61630020E041 /* Utilities */,
 				7253B48524410933003A40E0 /* Assets.xcassets */,
 				7253B48724410933003A40E0 /* LaunchScreen.storyboard */,
 				7253B48A24410933003A40E0 /* Info.plist */,
@@ -163,6 +170,7 @@
 				7253B4BD24418B13003A40E0 /* Configurable.swift */,
 				7253B4BF2442385F003A40E0 /* Sequence+Extensions.swift */,
 				7253B4C324427AA8003A40E0 /* Alert+Extensions.swift */,
+				726E6855246A30990020E041 /* Data+Extension.swift */,
 			);
 			path = Extensions;
 			sourceTree = "<group>";
@@ -192,6 +200,7 @@
 				7253B4C124426A06003A40E0 /* DropboxManager.swift */,
 				7253B4C72442E34A003A40E0 /* SyncManager.swift */,
 				7259916F244438090049127C /* BatchUploadOperation.swift */,
+				726E685A246B62BA0020E041 /* DeleteOperation.swift */,
 			);
 			path = Managers;
 			sourceTree = "<group>";
@@ -212,6 +221,14 @@
 				7253B4B8244189F3003A40E0 /* PhotoCell.swift */,
 			);
 			path = Views;
+			sourceTree = "<group>";
+		};
+		726E6857246B61630020E041 /* Utilities */ = {
+			isa = PBXGroup;
+			children = (
+				726E6858246B616F0020E041 /* TimezoneMapper.swift */,
+			);
+			path = Utilities;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -316,8 +333,10 @@
 				7253B4C02442385F003A40E0 /* Sequence+Extensions.swift in Sources */,
 				7253B4C424427AA8003A40E0 /* Alert+Extensions.swift in Sources */,
 				7253B4AD24412A10003A40E0 /* UIBarButtonItem+Extensions.swift in Sources */,
+				726E6859246B616F0020E041 /* TimezoneMapper.swift in Sources */,
 				7253B4B624413A1F003A40E0 /* CoreData+Extensions.swift in Sources */,
 				7253B48424410931003A40E0 /* PhotoSync.xcdatamodeld in Sources */,
+				726E685B246B62BA0020E041 /* DeleteOperation.swift in Sources */,
 				7253B4B42441397D003A40E0 /* Photo.swift in Sources */,
 				72599170244438090049127C /* BatchUploadOperation.swift in Sources */,
 				7253B4A224412487003A40E0 /* UIControl+Extensions.swift in Sources */,
@@ -328,6 +347,7 @@
 				7253B49E24412379003A40E0 /* UIView+Extensions.swift in Sources */,
 				7253B4B9244189F3003A40E0 /* PhotoCell.swift in Sources */,
 				7253B4C82442E34A003A40E0 /* SyncManager.swift in Sources */,
+				726E6856246A30990020E041 /* Data+Extension.swift in Sources */,
 				7259916E24442A5A0049127C /* StatusViewController.swift in Sources */,
 				7253B47A24410931003A40E0 /* AppDelegate.swift in Sources */,
 			);

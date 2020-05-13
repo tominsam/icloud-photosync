@@ -75,6 +75,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         startPhotoSync()
     }
 
+
     func startPhotoSync() {
         // Request photo access if we need it
         switch PHPhotoLibrary.authorizationStatus() {

@@ -19,12 +19,13 @@ class SyncManager: NSObject {
 
     var errors: [String] = []
 
-    let operationQueue = OperationQueue().configured {
+    private let operationQueue = OperationQueue().configured {
         // TODO dropbox API supports batch upload
         $0.maxConcurrentOperationCount = 1
     }
 
-    var progress: Progress { operationQueue.progress }
+    // Not using progress on operation queue
+    var progress = Progress()
 
     enum State {
         case notStarted
@@ -51,12 +52,12 @@ class SyncManager: NSObject {
         assert(Thread.isMainThread)
         NSLog("SYNC LOGGED ERROR: %@", error)
         errors.append(error)
-        NotificationCenter.default.post(name: .SyncManagerSyncProgress, object: operationQueue.progress)
+        NotificationCenter.default.post(name: .SyncManagerSyncProgress, object: progress)
     }
 
     func logProgress() {
         assert(Thread.isMainThread)
-        NotificationCenter.default.post(name: .SyncManagerSyncProgress, object: operationQueue.progress)
+        NotificationCenter.default.post(name: .SyncManagerSyncProgress, object: progress)
     }
 
     func sync() {
@@ -64,65 +65,64 @@ class SyncManager: NSObject {
         guard canSync else { return }
         self.state = .syncing
         self.errors.removeAll()
-        // First cut estimate
-        self.operationQueue.progress.totalUnitCount = Int64(Photo.count(in: persistentContainer.viewContext))
-        NotificationCenter.default.post(name: .PhotoKitManagerSyncProgress, object: operationQueue.progress)
+        NotificationCenter.default.post(name: .PhotoKitManagerSyncProgress, object: progress)
 
         persistentContainer.performBackgroundTask { [unowned self] context in
             var count = 0
 
-            // Walk through the photo database in chunks, it's much faster to fetch the
+            // Walk through the photo database in photoss, it's much faster to fetch the
             // corresponding assets and dropbox files like this.
             let allPhotos = Photo.matching(in: context)
-            for chunk in allPhotos.chunked(into: 200) {
-                // Bulk fetch dropbox files and assest for this chunk
-                let dropboxFiles = DropboxFile.matching("dropboxId IN %@", args: [chunk.map { $0.dropboxId } ], in: context).uniqueBy(\.dropboxId)
-                let rawAssets = PHAsset.fetchAssets(withLocalIdentifiers: chunk.map { $0.photoKitId }, options: nil)
+            for photos in allPhotos.chunked(into: 40) {
+                // Bulk fetch dropbox files and assets for this photos
+                let dropboxFiles = DropboxFile.matching("pathLower IN[c] %@", args: [photos.map { $0.pathLower } ], in: context).uniqueBy(\.pathLower)
+                let rawAssets = PHAsset.fetchAssets(withLocalIdentifiers: photos.map { $0.photoKitId }, options: nil)
                 let assets = (0..<rawAssets.count).map { rawAssets.object(at: $0) }.uniqueBy(\.localIdentifier)
 
-                let photosForUpload: [PHAsset] = chunk.compactMap { photo in
+                let photosForUpload: [BatchUploadOperation.UploadTask] = photos.compactMap { photo in
+                    let asset = assets[photo.photoKitId]
+                    let dropboxFile = dropboxFiles[photo.pathLower ?? ""] // asset?.dropboxPath.localizedLowercase ??  ?? ""]
 
-                    // If we're uploaded the file in the past, this is the file in dropbox that should represent it
-                    let dropboxFile = photo.dropboxId == nil ? nil : dropboxFiles[photo.dropboxId!]
+                    switch (asset, dropboxFile) {
 
-                    // If the photo is deleted locally, make sure it's also not in dropbox
-                    guard let asset = assets[photo.photoKitId] else {
-                        if let dropboxFile = dropboxFile, let path = dropboxFile.path {
-                            self.operationQueue.addOperation(DeleteOperation(photoKitId: photo.photoKitId, path: path, rev: dropboxFile.rev))
-                            count += 1
-                        } else {
-                            // possible (delete from both places)
-                            context.delete(photo)
-                            try! context.save()
-                        }
-                        // Doesn't need uploading
+                    case (.none, .none):
+                        // No photokit object, no dropbox object. The local photo object should not exist
+                        context.delete(photo)
+                        try! context.save()
                         return nil
-                    }
 
-                    if let dropboxFile = dropboxFile, photo.dropboxRev == dropboxFile.rev, photo.modified == photo.dropboxModified {
-                        // Local file rev matches dropbox file rev and has not been changed locally, so we can assume it's unchanged.
-                        return nil
-                    }
-
-                    // Images only for now
-                    switch asset.mediaType {
-                    case .image:
+                    case (.some(let asset), .none):
+                        // Object exists in PhotoKit but not in dropbox. Upload it
                         count += 1
-                        return asset
-                    default:
-                        //NSLog("Skipping media type \(asset.mediaType)")
+                        return .init(asset: asset, existingContentHash: nil)
+
+                    case (.none, .some(let file)):
+                        // Object exists in dropbox but not PhotoKit. Delete from Dropbox
+                        NSLog("Need to delete remote file \(file.pathLower)")
+                        self.operationQueue.addOperation(DeleteOperation(photoKitId: photo.photoKitId, path: file.pathLower, rev: file.rev))
                         return nil
+
+                    case (.some(let asset), .some(let file)):
+                        // Object exists in both. Does it need syncing
+                        if photo.contentHash == file.contentHash {
+                            return nil
+                        } else {
+                            count += 1
+                            return .init(asset: asset, existingContentHash: file.contentHash)
+                        }
                     }
                 }
 
-                self.operationQueue.addOperation(BatchUploadOperation(assets: photosForUpload))
+                self.progress.totalUnitCount = Int64(count)
+                self.progress.becomeCurrent(withPendingUnitCount: Int64(photosForUpload.count))
+                self.operationQueue.addOperation(BatchUploadOperation(tasks: photosForUpload))
+                self.progress.resignCurrent()
 
+                DispatchQueue.main.async {
+                    NotificationCenter.default.post(name: .SyncManagerSyncProgress, object: self.progress)
+                }
             }
 
-            self.operationQueue.progress.totalUnitCount = Int64(count)
-            DispatchQueue.main.async {
-                NotificationCenter.default.post(name: .SyncManagerSyncProgress, object: self.operationQueue.progress)
-            }
 
             self.operationQueue.addBarrierBlock {
                 NSLog("Upload complete")
@@ -132,7 +132,7 @@ class SyncManager: NSObject {
                     self.state = .error(self.errors)
                 }
                 DispatchQueue.main.async {
-                    NotificationCenter.default.post(name: .SyncManagerSyncProgress, object: self.operationQueue.progress)
+                    NotificationCenter.default.post(name: .SyncManagerSyncProgress, object: self.progress)
                 }
             }
 
@@ -172,41 +172,4 @@ extension Operation {
         }
     }
 }
-
-class DeleteOperation: Operation {
-    let photoKitId: String
-    let path: String
-    let rev: String
-
-    init(photoKitId: String, path: String, rev: String) {
-        self.photoKitId = photoKitId
-        self.path = path
-        self.rev = rev
-        super.init()
-    }
-
-    override func main() {
-        guard !isCancelled else { return }
-        let sema = DispatchSemaphore(value: 0)
-
-        AppDelegate.shared.dropboxManager.dropboxClient?.files.deleteV2(path: path, parentRev: rev).response { [unowned self] result, error in
-            if let error = error {
-                self.logError(path: self.path, error: error)
-            } else {
-                NSLog("Deleted \(self.path)")
-                // It's neither in the local store or the remote. We can remove it from the database
-                let context = AppDelegate.shared.persistentContainer.viewContext
-                if let photo = Photo.matching("photoKitId = %@", args: [self.photoKitId], in: context).first {
-                    context.delete(photo)
-                    try! photo.managedObjectContext!.save()
-                }
-            }
-            sema.signal()
-        }
-
-        _ = sema.wait(timeout: .distantFuture)
-        logProgress()
-    }
-}
-
 

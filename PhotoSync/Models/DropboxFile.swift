@@ -19,19 +19,19 @@ public class DropboxFile: NSManagedObject, ManagedObject {
     }
 
     @NSManaged public var dropboxId: String
-    @NSManaged public var path: String?
+    @NSManaged public var pathLower: String
     @NSManaged public var rev: String
+    @NSManaged public var contentHash: String
     @NSManaged public var modified: Date?
     @NSManaged public var syncRun: String?
 }
 
 extension DropboxFile {
 
-
     @discardableResult
     public static func insertOrUpdate(_ metadatas: [Files.FileMetadata], syncRun: String, into context: NSManagedObjectContext) -> [DropboxFile] {
         guard !metadatas.isEmpty else { return [] }
-        let existing = DropboxFile.matching("dropboxId IN (%@)", args: [metadatas.map { $0.id }], in: context).uniqueBy(\.dropboxId)
+        let existing = DropboxFile.matching("pathLower IN (%@)", args: [metadatas.map { $0.pathLower }], in: context).uniqueBy(\.pathLower)
         return metadatas.map { metadata in
             let file = existing[metadata.id] ?? context.insertObject()
             file.update(from: metadata)
@@ -40,11 +40,16 @@ extension DropboxFile {
         }
     }
 
+    public static func forPath(_ pathLower: String, context: NSManagedObjectContext) -> DropboxFile? {
+        return DropboxFile.matching("pathLower ==[c] %@", args: [pathLower], in: context).first
+    }
+
     func update(from metadata: Files.FileMetadata) {
         dropboxId = metadata.id
-        path = metadata.pathLower
+        pathLower = metadata.pathLower!
         rev = metadata.rev
         modified = metadata.serverModified
+        contentHash = metadata.contentHash!
     }
 
 }
