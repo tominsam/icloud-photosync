@@ -54,13 +54,13 @@ class PhotoCell: UICollectionViewCell, Reusable {
         let asset = PHAsset.fetchAssets(withLocalIdentifiers: [photo.photoKitId], options: nil).firstObject
 
         let config = UIImage.SymbolConfiguration(scale: .small)
-        if photo.removedFromServer {
-            iconView.image = UIImage(systemName: "trash.fill", withConfiguration: config)
-        } else if asset?.isFavorite == true {
-            iconView.image = UIImage(systemName: "heart.fill", withConfiguration: config)
-        } else {
-            iconView.image = nil
-        }
+//        if photo.removedFromServer {
+//            iconView.image = UIImage(systemName: "trash.fill", withConfiguration: config)
+//        } else if asset?.isFavorite == true {
+//            iconView.image = UIImage(systemName: "heart.fill", withConfiguration: config)
+//        } else {
+//            iconView.image = nil
+//        }
 
         if let asset = asset {
             imageRequestId = PHImageManager.default().requestImage(for: asset, targetSize: contentView.frame.size, contentMode: .aspectFill, options: nil) { image, errors in

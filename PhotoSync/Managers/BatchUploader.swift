@@ -1,5 +1,5 @@
 //
-//  BatchUploadOperation.swift
+//  BatchUploader.swift
 //  PhotoSync
 //
 //  Created by Thomas Insam on 4/12/20.
@@ -14,70 +14,69 @@ import Photos
 // Upload bundles of assets to dropbox at once - this is much much faster than uploading individually,
 // even though it's much more complicated, because Dropbox has internal transaction / locking that effectively
 // prevent me uploading more than one file at once.
-class BatchUploadOperation: Operation {
+class BatchUploader: LoggingOperation {
+
     struct UploadTask {
         let asset: PHAsset
         let existingContentHash: String?
     }
 
     // Internal operation queue to manage parallelization.
-    let operationQueue = OperationQueue().configured {
+    lazy var operationQueue = OperationQueue().configured {
         $0.maxConcurrentOperationCount = 3
     }
 
-    // The upload operations.
-    let operations: [UploadStartOperation]
+    let tasks: [UploadTask]
+    let dropboxClient = AppDelegate.shared.dropboxManager.dropboxClient!
 
     init(tasks: [UploadTask]) {
-        // by doing this in the constructor, the progress objects are properly reporting to the parent
-        self.operations = tasks.map { UploadStartOperation(task: $0) }
-        super.init()
+        self.tasks = tasks
     }
 
-    override func main() {
+    func run() {
+        let operations = tasks.map { UploadStartOperation(task: $0) }
+
+        // Queue all the assets for upload
+        operationQueue.addOperations(operations, waitUntilFinished: true)
+
+        // Once all the uploads are done, collect the results and make a single call to dropbox that closes the transaction.
+        // Map the operation results into the data structure that uploadSessionFinishBatch expects
+        let finishEntries = operations.compactMap { $0.finishEntry }
+        guard !finishEntries.isEmpty else {
+            // Everything in the batch was already on dropbox
+            NSLog("Nothing to upload")
+            return
+        }
+
         // We want to block main until the operation is complete. Sure, there are cleverer ways of doing
         // this but why bother?
         let sema = DispatchSemaphore(value: 0)
 
-        // Queue all the assets for upload
-        operationQueue.addOperations(operations, waitUntilFinished: false)
-
-        // Once all the uploads are done, collect the results and make a single call to dropbox that closes the transaction.
-        operationQueue.addBarrierBlock {
-            // Map the operation results into the data structure that uploadSessionFinishBatch expects
-            let finishEntries = self.operations.compactMap { $0.finishEntry }
-            guard !finishEntries.isEmpty else {
-                // Everything in the batch was already on dropbox
-                NSLog("Nothing to upload")
-                sema.signal()
-                return
-            }
-
-            NSLog("Finishing \(finishEntries.count) uploads")
-            AppDelegate.shared.dropboxManager.dropboxClient!.files.uploadSessionFinishBatch(entries: finishEntries).response { result, error in
-                // Now we need to poll and wait for the upload to complete
-                if let result = result {
-                    switch result {
-                    case .asyncJobId(let jobId):
-                        DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(3)) {
-                            self.checkJob(jobId: jobId, sema: sema)
-                        }
-                    case .complete(let complete):
-                        self.jobComplete(batchResult: complete, sema: sema)
-                    case .other:
-                        break
+        NSLog("Finishing \(finishEntries.count) uploads")
+        dropboxClient.files.uploadSessionFinishBatch(entries: finishEntries).response { result, error in
+            // Now we need to poll and wait for the upload to complete
+            if let result = result {
+                switch result {
+                case .asyncJobId(let jobId):
+                    DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(3)) {
+                        self.checkJob(jobId: jobId, sema: sema)
                     }
-                } else {
-                    self.logError(error: error!.description)
+                case .complete(let complete):
+                    self.jobComplete(batchResult: complete, sema: sema)
+                case .other:
+                    break
                 }
+            } else {
+                self.logError(error: error!.description)
             }
         }
+
         _ = sema.wait(timeout: .distantFuture)
     }
 
     func checkJob(jobId: String, sema: DispatchSemaphore) {
         NSLog("Checking for completion")
-        AppDelegate.shared.dropboxManager.dropboxClient!.files.uploadSessionFinishBatchCheck(asyncJobId: jobId).response { status, error in
+        dropboxClient.files.uploadSessionFinishBatchCheck(asyncJobId: jobId).response { status, error in
             if let status = status {
                 switch status {
                 case .inProgress:
@@ -100,7 +99,6 @@ class BatchUploadOperation: Operation {
         NSLog("Complete")
         // Really need better error handling
         AppDelegate.shared.persistentContainer.performBackgroundTask { context in
-            Photo.insertOrUpdate(self.operations.map { $0.task.asset }, syncRun: "", into: context)
             for result in batchResult.entries {
                 switch result {
                 case .success(let fileMetadata):
@@ -118,18 +116,16 @@ class BatchUploadOperation: Operation {
 
 
 // Fetches a PHAsset from iCloud and pushes it to Dropbox as part of a batch start
-class UploadStartOperation: Operation {
+class UploadStartOperation: Operation, LoggingOperation {
     // What to push
-    let task: BatchUploadOperation.UploadTask
-    let progress: Progress
+    let task: BatchUploader.UploadTask
 
     // The thing that was pushed
     var result: Files.UploadSessionStartResult?
     var bytes: UInt64 = 0
 
-    init(task: BatchUploadOperation.UploadTask) {
+    init(task: BatchUploader.UploadTask) {
         self.task = task
-        self.progress = Progress(totalUnitCount: 1)
         super.init()
     }
 
@@ -163,7 +159,6 @@ class UploadStartOperation: Operation {
             context.performAndWait {
                 if let photo = Photo.forAsset(self.task.asset, in: context) {
                     photo.contentHash = hash
-                    photo.pathLower = self.task.asset.dropboxPath.localizedLowercase
                     try! context.save()
                 }
             }
@@ -175,9 +170,6 @@ class UploadStartOperation: Operation {
                 self.upload(data: data)
             }
         }
-
-        progress.completedUnitCount = progress.totalUnitCount
-        logProgress()
     }
 
     func upload(data: Data) {

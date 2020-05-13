@@ -7,6 +7,7 @@
         <attribute name="pathLower" optional="YES" attributeType="String"/>
         <attribute name="rev" optional="YES" attributeType="String"/>
         <attribute name="syncRun" optional="YES" attributeType="String"/>
+        <attribute name="uploadRun" optional="YES" attributeType="String"/>
         <fetchIndex name="byPath">
             <fetchIndexElement property="pathLower" type="Binary" order="ascending"/>
         </fetchIndex>
@@ -14,16 +15,12 @@
     <entity name="Photo" representedClassName="Photo" syncable="YES">
         <attribute name="contentHash" optional="YES" attributeType="String"/>
         <attribute name="created" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
-        <attribute name="dropboxId" optional="YES" attributeType="String"/>
-        <attribute name="dropboxModified" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
-        <attribute name="dropboxRev" optional="YES" attributeType="String"/>
         <attribute name="modified" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="pathLower" optional="YES" attributeType="String"/>
         <attribute name="photoKitId" attributeType="String"/>
-        <attribute name="removedFromServer" optional="YES" attributeType="Boolean" usesScalarValueType="YES"/>
-        <attribute name="syncRun" optional="YES" attributeType="String"/>
-        <fetchIndex name="syncRun">
-            <fetchIndexElement property="syncRun" type="Binary" order="ascending"/>
+        <attribute name="uploadRun" optional="YES" attributeType="String"/>
+        <fetchIndex name="uploadRun">
+            <fetchIndexElement property="uploadRun" type="Binary" order="ascending"/>
         </fetchIndex>
         <uniquenessConstraints>
             <uniquenessConstraint>
@@ -32,7 +29,7 @@
         </uniquenessConstraints>
     </entity>
     <elements>
-        <element name="DropboxFile" positionX="-54" positionY="27" width="128" height="133"/>
-        <element name="Photo" positionX="-63" positionY="-18" width="128" height="193"/>
+        <element name="DropboxFile" positionX="-54" positionY="27" width="128" height="148"/>
+        <element name="Photo" positionX="-63" positionY="-18" width="128" height="133"/>
     </elements>
 </model>

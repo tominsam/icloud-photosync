@@ -18,9 +18,6 @@ class PhotoKitManager: NSObject {
 
     let persistentContainer = AppDelegate.shared.persistentContainer
 
-    // Arbitrary identifier for this run
-    //private let runIdentifier = UUID().uuidString
-
     // Lock so that we don't try to sync photos more than once at a time
     enum State {
         case notStarted
@@ -64,8 +61,6 @@ class PhotoKitManager: NSObject {
         persistentContainer.performBackgroundTask { [unowned self] context in
             let start = DispatchTime.now()
 
-            let runIdentifier = UUID().uuidString
-
             let allPhotosOptions = PHFetchOptions()
             allPhotosOptions.includeHiddenAssets = false
             allPhotosOptions.wantsIncrementalChangeDetails = true
@@ -98,7 +93,7 @@ class PhotoKitManager: NSObject {
                     context.reset()
                 }
 
-                if index % 10_000 == 0 {
+                if index % 4_000 == 0 {
                     if index > 0 {
                         NSLog("Synced \(index) photos")
                     }
@@ -110,20 +105,7 @@ class PhotoKitManager: NSObject {
 
                 let top = min(count, index + fetchSize)
                 let assets = allPhotos.objects(at: IndexSet(integersIn: index..<top))
-                Photo.insertOrUpdate(assets, syncRun: runIdentifier, into: context)
-            }
-
-            // Wasteful perhaps, but we spot deleted photos by generating a random "run identifier"
-            // and updating every photo we've seen in this sycn with that identifier. Therefore every
-            // photo left in the database _without_ that run identifier wasn't seen this time, and has
-            // been deleted since our last sync
-            let removed = Photo.matching("syncRun != %@", args: [runIdentifier], in: context)
-            if !removed.isEmpty {
-                NSLog("Removing \(removed.count) deleted photo(s)")
-                for photo in removed {
-                    photo.markRemoved()
-                    photo.syncRun = runIdentifier
-                }
+                Photo.insertOrUpdate(assets, into: context)
             }
 
             try! context.save()
@@ -139,51 +121,3 @@ class PhotoKitManager: NSObject {
     }
 }
 
-
-
-// There seems to be a bug here where deleted photos don't count as
-// intereesting? Sometimes deletions don't make it through this gate
-// at all. Sometimes they do, but then they immediately appear as created
-// again. Either way, I don't really trust this live updating thing
-// at all. Luckily it's not vital to the operation of the app - I'm
-// ok with syncing on startup given how fast sync is.
-
-//extension PhotoKitManager: PHPhotoLibraryChangeObserver {
-//    func photoLibraryDidChange(_ changeInstance: PHChange) {
-//
-//
-//        guard let changes = changeInstance.changeDetails(for: allPhotos) else {
-//            NSLog("Boring photo changes")
-//            return
-//        }
-//
-//        guard changes.hasIncrementalChanges else {
-//            NSLog("Photo changes are not incremental!")
-//            sync()
-//            return
-//        }
-//
-//        persistentContainer.performBackgroundTask { context in
-//            if !changes.removedObjects.isEmpty {
-//                NSLog("Deleted photos \(changes.removedObjects)")
-//                Photo.delete(changes.removedObjects, syncRun: self.runIdentifier, in: context)
-//            }
-//            if !changes.insertedObjects.isEmpty {
-//                NSLog("Seen new photo \(changes.insertedObjects)")
-//                Photo.insertOrUpdate(changes.insertedObjects, syncRun: self.runIdentifier, into: context)
-//            }
-//            if !changes.changedObjects.isEmpty {
-//                NSLog("Seen changed photos \(changes.changedObjects)")
-//                Photo.insertOrUpdate(changes.changedObjects, syncRun: self.runIdentifier, into: context)
-//            }
-//            try! context.save()
-//
-//            DispatchQueue.main.async {
-//                NotificationCenter.default.post(name: .PhotoKitManagerSyncComplete, object: nil)
-//            }
-//        }
-//
-//    }
-//}
-//
-//

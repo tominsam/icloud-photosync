@@ -19,13 +19,7 @@ class SyncManager: NSObject {
 
     var errors: [String] = []
 
-    private let operationQueue = OperationQueue().configured {
-        // TODO dropbox API supports batch upload
-        $0.maxConcurrentOperationCount = 1
-    }
-
-    // Not using progress on operation queue
-    var progress = Progress()
+    private var progress = Progress()
 
     enum State {
         case notStarted
@@ -68,20 +62,27 @@ class SyncManager: NSObject {
         NotificationCenter.default.post(name: .PhotoKitManagerSyncProgress, object: progress)
 
         persistentContainer.performBackgroundTask { [unowned self] context in
-            var count = 0
+            self.progress.totalUnitCount = Int64(Photo.count(in: context))
 
-            // Walk through the photo database in photoss, it's much faster to fetch the
-            // corresponding assets and dropbox files like this.
-            let allPhotos = Photo.matching(in: context)
-            for photos in allPhotos.chunked(into: 40) {
-                // Bulk fetch dropbox files and assets for this photos
-                let dropboxFiles = DropboxFile.matching("pathLower IN[c] %@", args: [photos.map { $0.pathLower } ], in: context).uniqueBy(\.pathLower)
+            let runIdentifier = UUID().uuidString
+            var uploads = [BatchUploader.UploadTask]()
+            var deletions = [DeleteOperation.DeleteTask]()
+
+            while true {
+                // fetch the next block of photos that need uploading
+                let photos = Photo.matching("uploadRun != %@ OR uploadRun == nil", args: [runIdentifier], limit: 40, in: context)
+                if photos.isEmpty {
+                    break
+                }
+
+                // Bulk fetch assets for this block
                 let rawAssets = PHAsset.fetchAssets(withLocalIdentifiers: photos.map { $0.photoKitId }, options: nil)
                 let assets = (0..<rawAssets.count).map { rawAssets.object(at: $0) }.uniqueBy(\.localIdentifier)
+                let dropboxFiles = DropboxFile.matching("pathLower IN %@", args: [photos.map { $0.pathLower }], in: context).uniqueBy(\.pathLower)
 
-                let photosForUpload: [BatchUploadOperation.UploadTask] = photos.compactMap { photo in
+                for photo in photos {
                     let asset = assets[photo.photoKitId]
-                    let dropboxFile = dropboxFiles[photo.pathLower ?? ""] // asset?.dropboxPath.localizedLowercase ??  ?? ""]
+                    let dropboxFile = dropboxFiles[photo.pathLower]
 
                     switch (asset, dropboxFile) {
 
@@ -89,54 +90,64 @@ class SyncManager: NSObject {
                         // No photokit object, no dropbox object. The local photo object should not exist
                         context.delete(photo)
                         try! context.save()
-                        return nil
 
                     case (.some(let asset), .none):
                         // Object exists in PhotoKit but not in dropbox. Upload it
-                        count += 1
-                        return .init(asset: asset, existingContentHash: nil)
+                        uploads.append(.init(asset: asset, existingContentHash: nil))
 
                     case (.none, .some(let file)):
                         // Object exists in dropbox but not PhotoKit. Delete from Dropbox
-                        NSLog("Need to delete remote file \(file.pathLower)")
-                        self.operationQueue.addOperation(DeleteOperation(photoKitId: photo.photoKitId, path: file.pathLower, rev: file.rev))
-                        return nil
+                        deletions.append(.init(photoKitId: photo.photoKitId, file: file))
 
                     case (.some(let asset), .some(let file)):
                         // Object exists in both. Does it need syncing
-                        if photo.contentHash == file.contentHash {
-                            return nil
-                        } else {
-                            count += 1
-                            return .init(asset: asset, existingContentHash: file.contentHash)
+                        if photo.contentHash != file.contentHash {
+                            uploads.append(.init(asset: asset, existingContentHash: file.contentHash))
                         }
                     }
+
+                    photo.uploadRun = runIdentifier
+                }
+                self.progress.completedUnitCount += Int64(photos.count)
+
+                // The uploader also manipulates the photo object, so avoid conflicts by letting go here.
+                try! context.save()
+                context.reset()
+
+                NSLog("Accumulated \(uploads.count) uploads and \(deletions.count) deletions")
+
+                if uploads.count >= 20 {
+                    BatchUploader(tasks: uploads).run()
+                    uploads = []
                 }
 
-                self.progress.totalUnitCount = Int64(count)
-                self.progress.becomeCurrent(withPendingUnitCount: Int64(photosForUpload.count))
-                self.operationQueue.addOperation(BatchUploadOperation(tasks: photosForUpload))
-                self.progress.resignCurrent()
+                if !deletions.isEmpty {
+                    // TODO
+                    deletions = []
+                }
 
                 DispatchQueue.main.async {
                     NotificationCenter.default.post(name: .SyncManagerSyncProgress, object: self.progress)
                 }
+
             }
 
-
-            self.operationQueue.addBarrierBlock {
-                NSLog("Upload complete")
-                if self.errors.isEmpty {
-                    self.state = .finished
-                } else {
-                    self.state = .error(self.errors)
-                }
-                DispatchQueue.main.async {
-                    NotificationCenter.default.post(name: .SyncManagerSyncProgress, object: self.progress)
-                }
+            if !uploads.isEmpty {
+                BatchUploader(tasks: uploads).run()
             }
 
-            NSLog("Enqueued \(count) operations")
+            self.progress.completedUnitCount += self.progress.totalUnitCount
+
+            NSLog("Upload complete")
+            if self.errors.isEmpty {
+                self.state = .finished
+            } else {
+                self.state = .error(self.errors)
+            }
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: .SyncManagerSyncProgress, object: self.progress)
+            }
+
         }
 
     }
@@ -144,7 +155,11 @@ class SyncManager: NSObject {
 
 }
 
-extension Operation {
+
+
+protocol LoggingOperation {}
+
+extension LoggingOperation {
     func logError(error: String) {
         DispatchQueue.main.async {
             AppDelegate.shared.syncManager.logError(error: error)

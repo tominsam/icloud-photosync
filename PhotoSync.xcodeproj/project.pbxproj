@@ -34,10 +34,11 @@
 		7253B4C62442AF21003A40E0 /* DropboxFile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7253B4C52442AF21003A40E0 /* DropboxFile.swift */; };
 		7253B4C82442E34A003A40E0 /* SyncManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7253B4C72442E34A003A40E0 /* SyncManager.swift */; };
 		7259916E24442A5A0049127C /* StatusViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7259916D24442A5A0049127C /* StatusViewController.swift */; };
-		72599170244438090049127C /* BatchUploadOperation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7259916F244438090049127C /* BatchUploadOperation.swift */; };
+		72599170244438090049127C /* BatchUploader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7259916F244438090049127C /* BatchUploader.swift */; };
 		726E6856246A30990020E041 /* Data+Extension.swift in Sources */ = {isa = PBXBuildFile; fileRef = 726E6855246A30990020E041 /* Data+Extension.swift */; };
 		726E6859246B616F0020E041 /* TimezoneMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 726E6858246B616F0020E041 /* TimezoneMapper.swift */; };
 		726E685B246B62BA0020E041 /* DeleteOperation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 726E685A246B62BA0020E041 /* DeleteOperation.swift */; };
+		726E685D246BBB6D0020E041 /* PHAsset+Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 726E685C246BBB6D0020E041 /* PHAsset+Extensions.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -94,10 +95,11 @@
 		7253B4C52442AF21003A40E0 /* DropboxFile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropboxFile.swift; sourceTree = "<group>"; };
 		7253B4C72442E34A003A40E0 /* SyncManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncManager.swift; sourceTree = "<group>"; };
 		7259916D24442A5A0049127C /* StatusViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusViewController.swift; sourceTree = "<group>"; };
-		7259916F244438090049127C /* BatchUploadOperation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatchUploadOperation.swift; sourceTree = "<group>"; };
+		7259916F244438090049127C /* BatchUploader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatchUploader.swift; sourceTree = "<group>"; };
 		726E6855246A30990020E041 /* Data+Extension.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Data+Extension.swift"; sourceTree = "<group>"; };
 		726E6858246B616F0020E041 /* TimezoneMapper.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = TimezoneMapper.swift; sourceTree = "<group>"; };
 		726E685A246B62BA0020E041 /* DeleteOperation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeleteOperation.swift; sourceTree = "<group>"; };
+		726E685C246BBB6D0020E041 /* PHAsset+Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PHAsset+Extensions.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -171,6 +173,7 @@
 				7253B4BF2442385F003A40E0 /* Sequence+Extensions.swift */,
 				7253B4C324427AA8003A40E0 /* Alert+Extensions.swift */,
 				726E6855246A30990020E041 /* Data+Extension.swift */,
+				726E685C246BBB6D0020E041 /* PHAsset+Extensions.swift */,
 			);
 			path = Extensions;
 			sourceTree = "<group>";
@@ -199,7 +202,7 @@
 				7253B4B0244134C9003A40E0 /* PhotoKitManager.swift */,
 				7253B4C124426A06003A40E0 /* DropboxManager.swift */,
 				7253B4C72442E34A003A40E0 /* SyncManager.swift */,
-				7259916F244438090049127C /* BatchUploadOperation.swift */,
+				7259916F244438090049127C /* BatchUploader.swift */,
 				726E685A246B62BA0020E041 /* DeleteOperation.swift */,
 			);
 			path = Managers;
@@ -332,13 +335,14 @@
 				7253B4C224426A06003A40E0 /* DropboxManager.swift in Sources */,
 				7253B4C02442385F003A40E0 /* Sequence+Extensions.swift in Sources */,
 				7253B4C424427AA8003A40E0 /* Alert+Extensions.swift in Sources */,
+				726E685D246BBB6D0020E041 /* PHAsset+Extensions.swift in Sources */,
 				7253B4AD24412A10003A40E0 /* UIBarButtonItem+Extensions.swift in Sources */,
 				726E6859246B616F0020E041 /* TimezoneMapper.swift in Sources */,
 				7253B4B624413A1F003A40E0 /* CoreData+Extensions.swift in Sources */,
 				7253B48424410931003A40E0 /* PhotoSync.xcdatamodeld in Sources */,
 				726E685B246B62BA0020E041 /* DeleteOperation.swift in Sources */,
 				7253B4B42441397D003A40E0 /* Photo.swift in Sources */,
-				72599170244438090049127C /* BatchUploadOperation.swift in Sources */,
+				72599170244438090049127C /* BatchUploader.swift in Sources */,
 				7253B4A224412487003A40E0 /* UIControl+Extensions.swift in Sources */,
 				7253B4AB2441286A003A40E0 /* PhotosViewController.swift in Sources */,
 				7253B4C62442AF21003A40E0 /* DropboxFile.swift in Sources */,

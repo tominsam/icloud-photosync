@@ -10,7 +10,12 @@ import Foundation
 import SwiftyDropbox
 import Photos
 
-class DeleteOperation: Operation {
+class DeleteOperation: Operation, LoggingOperation {
+    struct DeleteTask {
+        let photoKitId: String
+        let file: DropboxFile
+    }
+
     let photoKitId: String
     let path: String
     let rev: String
