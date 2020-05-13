@@ -19,7 +19,7 @@ class SyncManager: NSObject {
 
     var errors: [String] = []
 
-    private var progress = Progress()
+    var progress = Progress()
 
     enum State {
         case notStarted
@@ -61,6 +61,18 @@ class SyncManager: NSObject {
         self.errors.removeAll()
         NotificationCenter.default.post(name: .PhotoKitManagerSyncProgress, object: progress)
 
+        // Sync wants to run in the background
+        var backgroundTaskID: UIBackgroundTaskIdentifier = .invalid
+        var cancelled: Bool = false
+        backgroundTaskID = UIApplication.shared.beginBackgroundTask(withName: "Finish Upload") { [unowned self] in
+            NSLog("Background task is expired")
+            // End the task if time expires.
+            UIApplication.shared.endBackgroundTask(backgroundTaskID)
+            backgroundTaskID = .invalid
+            self.logError(error: "Run out of background time")
+            cancelled = true
+        }
+
         persistentContainer.performBackgroundTask { [unowned self] context in
             self.progress.totalUnitCount = Int64(Photo.count(in: context))
 
@@ -68,7 +80,8 @@ class SyncManager: NSObject {
             var uploads = [BatchUploader.UploadTask]()
             var deletions = [DeleteOperation.DeleteTask]()
 
-            while true {
+            while !cancelled {
+
                 // fetch the next block of photos that need uploading
                 let photos = Photo.matching("uploadRun != %@ OR uploadRun == nil", args: [runIdentifier], limit: 40, in: context)
                 if photos.isEmpty {
@@ -128,15 +141,17 @@ class SyncManager: NSObject {
 
                 DispatchQueue.main.async {
                     NotificationCenter.default.post(name: .SyncManagerSyncProgress, object: self.progress)
+                    NSLog("Remaining background time is \(UIApplication.shared.backgroundTimeRemaining)")
                 }
 
             }
 
-            if !uploads.isEmpty {
+            if !cancelled {
                 BatchUploader(tasks: uploads).run()
+                self.progress.completedUnitCount += self.progress.totalUnitCount
+                UIApplication.shared.endBackgroundTask(backgroundTaskID)
+                backgroundTaskID = .invalid
             }
-
-            self.progress.completedUnitCount += self.progress.totalUnitCount
 
             NSLog("Upload complete")
             if self.errors.isEmpty {
@@ -144,6 +159,7 @@ class SyncManager: NSObject {
             } else {
                 self.state = .error(self.errors)
             }
+
             DispatchQueue.main.async {
                 NotificationCenter.default.post(name: .SyncManagerSyncProgress, object: self.progress)
             }

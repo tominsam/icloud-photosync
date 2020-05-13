@@ -136,7 +136,7 @@ class UploadStartOperation: Operation, LoggingOperation {
         case .image:
             break
         default:
-            NSLog("Skipping media type \(task.asset.mediaType.rawValue)")
+            //NSLog("Skipping media type \(task.asset.mediaType.rawValue)")
             return
         }
 

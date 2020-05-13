@@ -54,9 +54,14 @@ extension Photo {
         if modified != asset.modificationDate {
             // if the file has been changed, invalidate the content hash
             contentHash = nil
+            // and the path (because you can change the date on photos)
+            pathLower = ""
             modified = asset.modificationDate
         }
         if pathLower.isEmpty {
+            // dropboxPath is somewhat slow, so the first sync of photos takes a lot
+            // longer, but everything downstream of this is much easier if I can rely
+            // on this field.
             pathLower = asset.dropboxPath.localizedLowercase
         }
     }

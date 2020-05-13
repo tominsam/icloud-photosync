@@ -53,6 +53,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         //navigationController.viewControllers = [PhotosViewController()]
         updateDropboxNavigationItem()
         startDropboxSync()
+        startPhotoSync()
         return true
     }
 
@@ -72,7 +73,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     func applicationDidBecomeActive(_ application: UIApplication) {
-        startPhotoSync()
     }
 
 
