@@ -16,7 +16,7 @@
         <attribute name="contentHash" optional="YES" attributeType="String"/>
         <attribute name="created" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="modified" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
-        <attribute name="pathLower" optional="YES" attributeType="String"/>
+        <attribute name="path" optional="YES" attributeType="String"/>
         <attribute name="photoKitId" attributeType="String"/>
         <attribute name="uploadRun" optional="YES" attributeType="String"/>
         <fetchIndex name="uploadRun">
@@ -25,6 +25,9 @@
         <uniquenessConstraints>
             <uniquenessConstraint>
                 <constraint value="photoKitId"/>
+            </uniquenessConstraint>
+            <uniquenessConstraint>
+                <constraint value="path"/>
             </uniquenessConstraint>
         </uniquenessConstraints>
     </entity>

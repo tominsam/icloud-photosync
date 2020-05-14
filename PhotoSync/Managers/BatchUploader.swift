@@ -18,6 +18,7 @@ class BatchUploader: LoggingOperation {
 
     struct UploadTask {
         let asset: PHAsset
+        let filename: String
         let existingContentHash: String?
     }
 
@@ -44,7 +45,7 @@ class BatchUploader: LoggingOperation {
         let finishEntries = operations.compactMap { $0.finishEntry }
         guard !finishEntries.isEmpty else {
             // Everything in the batch was already on dropbox
-            NSLog("Nothing to upload")
+            //NSLog("Nothing to upload")
             return
         }
 
@@ -150,7 +151,7 @@ class UploadStartOperation: Operation, LoggingOperation {
             guard !self.isCancelled else { return }
 
             guard let data = data, let hash = data.dropboxContentHash() else {
-                self.logError(error: "Failed to fetch image \(self.task.asset.dropboxPath)")
+                self.logError(error: "Failed to fetch image \(self.task.filename)")
                 return
             }
 
@@ -166,7 +167,7 @@ class UploadStartOperation: Operation, LoggingOperation {
             // Skip the upload if possible
             if self.task.existingContentHash != hash {
                 // Blocking call that uploads to dropbox and counts the bytes
-                NSLog("Uploading \(self.task.asset.dropboxPath)")
+                NSLog("Uploading \(self.task.filename) with \(hash) replacing \(self.task.existingContentHash ?? "nil")")
                 self.upload(data: data)
             }
         }
@@ -188,7 +189,7 @@ class UploadStartOperation: Operation, LoggingOperation {
             return nil
         }
         let cursor = Files.UploadSessionCursor(sessionId: result.sessionId, offset: bytes)
-        let commitInfo = Files.CommitInfo(path: task.asset.dropboxPath, mode: .overwrite, autorename: false, clientModified: task.asset.creationDate ?? task.asset.modificationDate)
+        let commitInfo = Files.CommitInfo(path: task.filename, mode: .overwrite, autorename: false, clientModified: task.asset.creationDate ?? task.asset.modificationDate)
         return Files.UploadSessionFinishArg(cursor: cursor, commit: commitInfo)
     }
 

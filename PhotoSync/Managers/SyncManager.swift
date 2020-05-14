@@ -64,14 +64,6 @@ class SyncManager: NSObject {
         // Sync wants to run in the background
         var backgroundTaskID: UIBackgroundTaskIdentifier = .invalid
         var cancelled: Bool = false
-        backgroundTaskID = UIApplication.shared.beginBackgroundTask(withName: "Finish Upload") { [unowned self] in
-            NSLog("Background task is expired")
-            // End the task if time expires.
-            UIApplication.shared.endBackgroundTask(backgroundTaskID)
-            backgroundTaskID = .invalid
-            self.logError(error: "Run out of background time")
-            cancelled = true
-        }
 
         persistentContainer.performBackgroundTask { [unowned self] context in
             self.progress.totalUnitCount = Int64(Photo.count(in: context))
@@ -91,11 +83,11 @@ class SyncManager: NSObject {
                 // Bulk fetch assets for this block
                 let rawAssets = PHAsset.fetchAssets(withLocalIdentifiers: photos.map { $0.photoKitId }, options: nil)
                 let assets = (0..<rawAssets.count).map { rawAssets.object(at: $0) }.uniqueBy(\.localIdentifier)
-                let dropboxFiles = DropboxFile.matching("pathLower IN %@", args: [photos.map { $0.pathLower }], in: context).uniqueBy(\.pathLower)
+                let dropboxFiles = DropboxFile.matching("pathLower IN %@", args: [photos.map { $0.path.localizedLowercase }], in: context).uniqueBy(\.pathLower)
 
                 for photo in photos {
                     let asset = assets[photo.photoKitId]
-                    let dropboxFile = dropboxFiles[photo.pathLower]
+                    let dropboxFile = dropboxFiles[photo.path.localizedLowercase]
 
                     switch (asset, dropboxFile) {
 
@@ -106,7 +98,7 @@ class SyncManager: NSObject {
 
                     case (.some(let asset), .none):
                         // Object exists in PhotoKit but not in dropbox. Upload it
-                        uploads.append(.init(asset: asset, existingContentHash: nil))
+                        uploads.append(.init(asset: asset, filename: photo.path, existingContentHash: nil))
 
                     case (.none, .some(let file)):
                         // Object exists in dropbox but not PhotoKit. Delete from Dropbox
@@ -115,7 +107,7 @@ class SyncManager: NSObject {
                     case (.some(let asset), .some(let file)):
                         // Object exists in both. Does it need syncing
                         if photo.contentHash != file.contentHash {
-                            uploads.append(.init(asset: asset, existingContentHash: file.contentHash))
+                            uploads.append(.init(asset: asset, filename: photo.path, existingContentHash: file.contentHash))
                         }
                     }
 
@@ -127,11 +119,29 @@ class SyncManager: NSObject {
                 try! context.save()
                 context.reset()
 
-                NSLog("Accumulated \(uploads.count) uploads and \(deletions.count) deletions")
+                //NSLog("Accumulated \(uploads.count) uploads and \(deletions.count) deletions")
 
                 if uploads.count >= 20 {
+
+                    backgroundTaskID = UIApplication.shared.beginBackgroundTask(withName: "Finish Upload") { [unowned self] in
+                        NSLog("Background task is expired")
+                        // End the task if time expires.
+                        UIApplication.shared.endBackgroundTask(backgroundTaskID)
+                        backgroundTaskID = .invalid
+                        self.logError(error: "Run out of background time")
+                        cancelled = true
+                    }
+
                     BatchUploader(tasks: uploads).run()
                     uploads = []
+
+                    if !cancelled {
+                        BatchUploader(tasks: uploads).run()
+                        self.progress.completedUnitCount += self.progress.totalUnitCount
+                        UIApplication.shared.endBackgroundTask(backgroundTaskID)
+                        backgroundTaskID = .invalid
+                    }
+
                 }
 
                 if !deletions.isEmpty {
@@ -141,16 +151,8 @@ class SyncManager: NSObject {
 
                 DispatchQueue.main.async {
                     NotificationCenter.default.post(name: .SyncManagerSyncProgress, object: self.progress)
-                    NSLog("Remaining background time is \(UIApplication.shared.backgroundTimeRemaining)")
                 }
 
-            }
-
-            if !cancelled {
-                BatchUploader(tasks: uploads).run()
-                self.progress.completedUnitCount += self.progress.totalUnitCount
-                UIApplication.shared.endBackgroundTask(backgroundTaskID)
-                backgroundTaskID = .invalid
             }
 
             NSLog("Upload complete")
