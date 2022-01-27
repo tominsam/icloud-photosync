@@ -1,7 +1,7 @@
 # https://github.com/yonaskolb/XcodeGen/blob/master/Docs/ProjectSpec.md
 name: PhotoSync
 options:
-  bundleIdPrefix: org.jerakeen
+  bundleIdPrefix: org.movieos
 packages:
   SwiftyDropbox:
     url: https://github.com/dropbox/SwiftyDropbox.git
@@ -20,8 +20,8 @@ targets:
     settings:
       base:
         TARGETED_DEVICE_FAMILY: 1 # iphone only
-        PRODUCT_BUNDLE_IDENTIFIER: com.tominsam.photosync
-#        DEVELOPMENT_TEAM: 76AFK3W7M9
+        PRODUCT_BUNDLE_IDENTIFIER: org.movieos.photosync
+        DEVELOPMENT_TEAM: 76AFK3W7M9
       debug:
       release:
     sources:

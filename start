@@ -1,1 +1,13 @@
-killall Xcode; sleep 2; xcodegen && open PhotoSync.xcodeproj
+#!/bin/bash -ex
+killall Xcode
+
+sleep 2
+
+for SIZE in 1024 180 167 152 120 120 87 80 80 76 60 58 58 40 40 40 29 20
+do
+  convert Assets/AppIcon.png -resize $SIZE ./PhotoSync/Assets.xcassets/AppIcon.appiconset/AppIcon-${SIZE}x${SIZE}.png
+done
+
+xcodegen
+
+open PhotoSync.xcodeproj

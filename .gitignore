@@ -1,3 +1,4 @@
 PhotoSync.xcodeproj/*
 PhotoSync.entitlements
 Info.plist
+PhotoSync/Assets.xcassets/AppIcon.appiconset/*.png
