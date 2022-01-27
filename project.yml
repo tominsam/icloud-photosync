@@ -1,0 +1,72 @@
+# https://github.com/yonaskolb/XcodeGen/blob/master/Docs/ProjectSpec.md
+name: PhotoSync
+options:
+  bundleIdPrefix: org.jerakeen
+packages:
+  SwiftyDropbox:
+    url: https://github.com/dropbox/SwiftyDropbox.git
+    revision: 37355f57beee1843f1a8339350b4192f264230d1
+  KeychainSwift:
+    url: https://github.com/evgenyneu/keychain-swift.git
+    revision: 32a99b537d1c6f3529a08257c28a5feb70c0c5af
+
+targets:
+  PhotoSync:
+    name: PhotoSync
+    type: application
+    platform: iOS
+    deploymentTarget: "14.0"
+    scheme: {}
+    settings:
+      base:
+        TARGETED_DEVICE_FAMILY: 1 # iphone only
+        PRODUCT_BUNDLE_IDENTIFIER: com.tominsam.photosync
+#        DEVELOPMENT_TEAM: 76AFK3W7M9
+      debug:
+      release:
+    sources:
+      - path: "PhotoSync"
+        name: "Code"
+        compilerFlags: "-Xfrontend -warn-concurrency -Xfrontend -enable-actor-data-race-checks"
+      - path: "README.md"
+        buildPhase: none
+      - path: "CHANGELOG.md"
+        buildPhase: none
+      - path: "project.yml"
+        buildPhase: none
+      - path: ".swiftlint.yml"
+        buildPhase: none
+    dependencies:
+      - package: SwiftyDropbox
+      - package: KeychainSwift
+    info:
+      path: Info.plist
+      properties:
+        NSPhotoLibraryUsageDescription: "The app reads your photos to send them to Dropbox"
+        LSApplicationCategoryType: public.app-category.developer-tools
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+          UIImageName: LaunchIcon
+        CFBundleShortVersionString: "1"
+        CFBundleVersion: "1.0"
+        ITSAppUsesNonExemptEncryption: false
+        UIStatusBarStyle: UIStatusBarStyleLightContent
+        UIViewControllerBasedStatusBarAppearance: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+          UISceneConfigurations:
+            UIWindowSceneSessionRoleApplication:
+              - UISceneConfigurationName: Main
+                UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).SceneDelegate
+    # entitlements:
+    #   path: PhotoSync.entitlements
+    #   properties:
+    #     com.apple.developer.networking.multicast: true
+    #     com.apple.security.files.user-selected.read-write: true
+    #     com.apple.security.network.client: true
+    #     com.apple.security.app-sandbox: true
+    postCompileScripts:
+      - script: /opt/homebrew/bin/swiftlint
+        name: Run SwiftLint
