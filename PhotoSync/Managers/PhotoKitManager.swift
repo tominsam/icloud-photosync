@@ -47,7 +47,7 @@ class PhotoKitManager: NSObject {
 
     override init() {
         super.init()
-        //PHPhotoLibrary.shared().register(self)
+        // PHPhotoLibrary.shared().register(self)
     }
 
     func sync() {
@@ -120,4 +120,3 @@ class PhotoKitManager: NSObject {
         }
     }
 }
-

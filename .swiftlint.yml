@@ -10,6 +10,9 @@ disabled_rules:
   - force_try
   - force_cast
 
+excluded:
+  - PhotoSync/Utilities/TimezoneMapper.swift
+
 custom_rules:
   restrict_non_ascii:
     included: ".*\\.swift"

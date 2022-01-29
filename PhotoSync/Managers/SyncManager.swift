@@ -120,7 +120,7 @@ class SyncManager: NSObject {
                 try! context.save()
                 context.reset()
 
-                //NSLog("Accumulated \(uploads.count) uploads and \(deletions.count) deletions")
+                // NSLog("Accumulated \(uploads.count) uploads and \(deletions.count) deletions")
 
                 if uploads.count >= 20 {
 
@@ -171,10 +171,7 @@ class SyncManager: NSObject {
 
     }
 
-
 }
-
-
 
 protocol LoggingOperation {}
 
@@ -206,4 +203,3 @@ extension LoggingOperation {
         }
     }
 }
-

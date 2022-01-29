@@ -50,14 +50,14 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         window!.rootViewController = navigationController
         window!.makeKeyAndVisible()
         navigationController.viewControllers = [StatusViewController()]
-        //navigationController.viewControllers = [PhotosViewController()]
+        // navigationController.viewControllers = [PhotosViewController()]
         updateDropboxNavigationItem()
         startDropboxSync()
         startPhotoSync()
         return true
     }
 
-    func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey : Any] = [:]) -> Bool {
+    func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
         return DropboxClientsManager.handleRedirectURL(url) { authResult in
             switch authResult {
             case .success(let accessToken):
@@ -80,12 +80,11 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     func applicationDidBecomeActive(_ application: UIApplication) {
     }
 
-
     func startPhotoSync() {
         // Request photo access if we need it
         switch PHPhotoLibrary.authorizationStatus() {
         case .notDetermined:
-            PHPhotoLibrary.requestAuthorization { status in
+            PHPhotoLibrary.requestAuthorization { _ in
                 DispatchQueue.main.async {
                     self.startPhotoSync()
                 }
@@ -125,4 +124,3 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
 }
-

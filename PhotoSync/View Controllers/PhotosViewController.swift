@@ -117,5 +117,4 @@ extension PhotosViewController: UICollectionViewDelegate, UICollectionViewDataSo
         return cell
     }
 
-
 }

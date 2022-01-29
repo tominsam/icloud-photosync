@@ -9,7 +9,6 @@
 import Foundation
 import CryptoKit
 
-
 extension InputStream {
 
     private static func sha256(data: Data) -> Data {
@@ -32,8 +31,7 @@ extension InputStream {
             if length == 0 {
                 // EOF
                 break
-            }
-            else if length < 0 {
+            } else if length < 0 {
                 return nil
             }
 

@@ -63,7 +63,7 @@ class PhotoCell: UICollectionViewCell, Reusable {
         }
 
         if let asset = asset {
-            imageRequestId = PHImageManager.default().requestImage(for: asset, targetSize: contentView.frame.size, contentMode: .aspectFill, options: nil) { image, errors in
+            imageRequestId = PHImageManager.default().requestImage(for: asset, targetSize: contentView.frame.size, contentMode: .aspectFill, options: nil) { image, _ in
                 self.imageView.image = image
             }
         } else {

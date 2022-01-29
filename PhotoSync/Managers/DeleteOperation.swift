@@ -31,7 +31,7 @@ class DeleteOperation: Operation, LoggingOperation {
         guard !isCancelled else { return }
         let sema = DispatchSemaphore(value: 0)
 
-        AppDelegate.shared.dropboxManager.dropboxClient?.files.deleteV2(path: path, parentRev: rev).response { [unowned self] result, error in
+        AppDelegate.shared.dropboxManager.dropboxClient?.files.deleteV2(path: path, parentRev: rev).response { [unowned self] _, error in
             if let error = error {
                 self.logError(path: self.path, error: error)
             } else {
@@ -50,5 +50,3 @@ class DeleteOperation: Operation, LoggingOperation {
         logProgress()
     }
 }
-
-

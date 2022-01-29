@@ -10,7 +10,6 @@ import UIKit
 import SwiftyDropbox
 import Photos
 
-
 // Upload bundles of assets to dropbox at once - this is much much faster than uploading individually,
 // even though it's much more complicated, because Dropbox has internal transaction / locking that effectively
 // prevent me uploading more than one file at once.
@@ -45,7 +44,7 @@ class BatchUploader: LoggingOperation {
         let finishEntries = operations.compactMap { $0.finishEntry }
         guard !finishEntries.isEmpty else {
             // Everything in the batch was already on dropbox
-            //NSLog("Nothing to upload")
+            // NSLog("Nothing to upload")
             return
         }
 
@@ -93,7 +92,6 @@ class BatchUploader: LoggingOperation {
 
 }
 
-
 // Fetches a PHAsset from iCloud and pushes it to Dropbox as part of a batch start
 class UploadStartOperation: Operation, LoggingOperation {
     // What to push
@@ -115,7 +113,7 @@ class UploadStartOperation: Operation, LoggingOperation {
         case .image:
             break
         default:
-            //NSLog("Skipping media type \(task.asset.mediaType.rawValue)")
+            // NSLog("Skipping media type \(task.asset.mediaType.rawValue)")
             return
         }
 
@@ -125,7 +123,7 @@ class UploadStartOperation: Operation, LoggingOperation {
         options.deliveryMode = .highQualityFormat
         options.version = .current // save out edited versions (or original if no edits)
         options.isSynchronous = true // block operation
-        manager.requestImageDataAndOrientation(for: task.asset, options: options) { [unowned self] data, uti, orientation, info in
+        manager.requestImageDataAndOrientation(for: task.asset, options: options) { [unowned self] data, _, _, _ in
             guard !self.isCancelled else { return }
 
             guard let data = data, let hash = data.dropboxContentHash() else {
@@ -153,7 +151,7 @@ class UploadStartOperation: Operation, LoggingOperation {
 
     func upload(data: Data) {
         let sema = DispatchSemaphore(value: 0)
-        AppDelegate.shared.dropboxManager.dropboxClient!.files.uploadSessionStart(close: true, input: data).response { result, error in
+        AppDelegate.shared.dropboxManager.dropboxClient!.files.uploadSessionStart(close: true, input: data).response { result, _ in
             self.result = result
             self.bytes = UInt64(data.count)
             sema.signal()
@@ -172,5 +170,3 @@ class UploadStartOperation: Operation, LoggingOperation {
     }
 
 }
-
-

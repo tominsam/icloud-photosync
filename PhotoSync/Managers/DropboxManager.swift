@@ -47,7 +47,7 @@ class DropboxManager: NSObject {
             dropboxClient = nil
         }
     }
-    
+
     func logIn(accessToken: String) {
         assert(Thread.isMainThread)
         keychain.set(accessToken, forKey: Self.KeychainDropboxAccessToken)
@@ -146,5 +146,3 @@ class DropboxManager: NSObject {
     }
 
 }
-
-

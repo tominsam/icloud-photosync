@@ -10,7 +10,6 @@ import Foundation
 import CoreData
 import SwiftyDropbox
 
-
 @objc(DropboxFile)
 public class DropboxFile: NSManagedObject, ManagedObject {
 

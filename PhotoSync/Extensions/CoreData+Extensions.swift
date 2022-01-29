@@ -14,7 +14,7 @@ extension NSManagedObjectContext {
     }
 }
 
-public protocol ManagedObject: class, NSFetchRequestResult {
+public protocol ManagedObject: NSFetchRequestResult {
     static var entityName: String { get }
     static var defaultSortDescriptors: [NSSortDescriptor] { get }
 }

@@ -77,9 +77,7 @@ extension Photo {
         }
     }
 
-    
 }
-
 
 extension String {
     static let trailingDigit = try! NSRegularExpression(pattern: #"^(.*)\s\((\d+)\)$"#, options: [])
