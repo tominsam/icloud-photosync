@@ -7,6 +7,8 @@ disabled_rules:
   - cyclomatic_complexity
   - type_body_length
   - file_length
+  - force_try
+  - force_cast
 
 custom_rules:
   restrict_non_ascii:

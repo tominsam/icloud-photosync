@@ -58,7 +58,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey : Any] = [:]) -> Bool {
-        if let authResult = DropboxClientsManager.handleRedirectURL(url) {
+        return DropboxClientsManager.handleRedirectURL(url) { authResult in
             switch authResult {
             case .success(let accessToken):
                 self.dropboxManager.logIn(accessToken: accessToken.accessToken)
@@ -66,10 +66,15 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             case .cancel:
                 break
             case .error(_, let description):
-                navigationController.present(UIAlertController.simpleAlert(title: "Dropbox Error", message: description, action: "OK"), animated: true, completion: nil)
+                self.navigationController.present(UIAlertController.simpleAlert(
+                    title: "Dropbox Error",
+                    message: description ?? "Unknown error",
+                    action: "OK"
+                ), animated: true, completion: nil)
+            case .none:
+                break
             }
         }
-        return true
     }
 
     func applicationDidBecomeActive(_ application: UIApplication) {

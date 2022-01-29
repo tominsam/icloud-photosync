@@ -54,12 +54,12 @@ targets:
         UIViewControllerBasedStatusBarAppearance: true
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
-        UIApplicationSceneManifest:
-          UIApplicationSupportsMultipleScenes: false
-          UISceneConfigurations:
-            UIWindowSceneSessionRoleApplication:
-              - UISceneConfigurationName: Main
-                UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).SceneDelegate
+#        UIApplicationSceneManifest:
+#          UIApplicationSupportsMultipleScenes: false
+#          UISceneConfigurations:
+#            UIWindowSceneSessionRoleApplication:
+#              - UISceneConfigurationName: Main
+#                UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).SceneDelegate
     # entitlements:
     #   path: PhotoSync.entitlements
     #   properties:

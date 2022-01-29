@@ -54,59 +54,37 @@ class BatchUploader: LoggingOperation {
         let sema = DispatchSemaphore(value: 0)
 
         NSLog("Finishing \(finishEntries.count) uploads")
-        dropboxClient.files.uploadSessionFinishBatch(entries: finishEntries).response { result, error in
-            // Now we need to poll and wait for the upload to complete
-            if let result = result {
-                switch result {
-                case .asyncJobId(let jobId):
-                    DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(3)) {
-                        self.checkJob(jobId: jobId, sema: sema)
-                    }
-                case .complete(let complete):
-                    self.jobComplete(batchResult: complete, sema: sema)
-                case .other:
-                    break
-                }
-            } else {
+        dropboxClient.files.uploadSessionFinishBatchV2(entries: finishEntries).response { [unowned self] result, error in
+            guard let result = result else {
                 self.logError(error: error!.description)
+                return
             }
+            var success = [Files.FileMetadata]()
+            var failure = [Files.UploadSessionFinishError]()
+            for entry in result.entries {
+                switch entry {
+                case .success(let fileMetadata):
+                    success.append(fileMetadata)
+                case .failure(let error):
+                    failure.append(error)
+                }
+            }
+            self.jobComplete(success: success, failure: failure, sema: sema)
         }
 
         _ = sema.wait(timeout: .distantFuture)
     }
 
-    func checkJob(jobId: String, sema: DispatchSemaphore) {
-        NSLog("Checking for completion")
-        dropboxClient.files.uploadSessionFinishBatchCheck(asyncJobId: jobId).response { status, error in
-            if let status = status {
-                switch status {
-                case .inProgress:
-                    DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(2)) {
-                        self.checkJob(jobId: jobId, sema: sema)
-                    }
-                case .complete(let result):
-                    self.jobComplete(batchResult: result, sema: sema)
-                }
-            } else {
-                self.logError(error: error!.description)
-                sema.signal()
-            }
-        }
-
-    }
-
-    func jobComplete(batchResult: Files.UploadSessionFinishBatchResult, sema: DispatchSemaphore) {
+    func jobComplete(success: [Files.FileMetadata], failure: [Files.UploadSessionFinishError], sema: DispatchSemaphore) {
         // Now we've uploaded all the files, we can connect them to the original assets in core data.
         NSLog("Complete")
         // Really need better error handling
         AppDelegate.shared.persistentContainer.performBackgroundTask { context in
-            for result in batchResult.entries {
-                switch result {
-                case .success(let fileMetadata):
-                    DropboxFile.insertOrUpdate([fileMetadata], syncRun: "", into: context)
-                default:
-                    fatalError()
-                }
+            for file in success {
+                DropboxFile.insertOrUpdate([file], syncRun: "", into: context)
+            }
+            for _ in failure {
+                fatalError()
             }
             try! context.save()
             sema.signal()
@@ -145,7 +123,7 @@ class UploadStartOperation: Operation, LoggingOperation {
         let manager = PHImageManager.default()
         let options = PHImageRequestOptions()
         options.deliveryMode = .highQualityFormat
-        options.version = .current // save out edited versions
+        options.version = .current // save out edited versions (or original if no edits)
         options.isSynchronous = true // block operation
         manager.requestImageDataAndOrientation(for: task.asset, options: options) { [unowned self] data, uti, orientation, info in
             guard !self.isCancelled else { return }
