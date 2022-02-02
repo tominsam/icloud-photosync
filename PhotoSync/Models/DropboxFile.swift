@@ -6,13 +6,12 @@
 //  Copyright © 2020 Thomas Insam. All rights reserved.
 //
 
-import Foundation
 import CoreData
+import Foundation
 import SwiftyDropbox
 
 @objc(DropboxFile)
 public class DropboxFile: NSManagedObject, ManagedObject {
-
     public static var defaultSortDescriptors: [NSSortDescriptor] {
         return [NSSortDescriptor(key: "modified", ascending: false)]
     }
@@ -26,10 +25,9 @@ public class DropboxFile: NSManagedObject, ManagedObject {
     @NSManaged public var uploadRun: String?
 }
 
-extension DropboxFile {
-
+public extension DropboxFile {
     @discardableResult
-    public static func insertOrUpdate(_ metadatas: [Files.FileMetadata], syncRun: String, into context: NSManagedObjectContext) -> [DropboxFile] {
+    static func insertOrUpdate(_ metadatas: [Files.FileMetadata], syncRun: String, into context: NSManagedObjectContext) -> [DropboxFile] {
         guard !metadatas.isEmpty else { return [] }
         let existing = DropboxFile.matching("pathLower IN (%@)", args: [metadatas.map { $0.pathLower! }], in: context).uniqueBy(\.pathLower)
         return metadatas.map { metadata in
@@ -40,16 +38,15 @@ extension DropboxFile {
         }
     }
 
-    public static func forPath(_ pathLower: String, context: NSManagedObjectContext) -> DropboxFile? {
+    static func forPath(_ pathLower: String, context: NSManagedObjectContext) -> DropboxFile? {
         return DropboxFile.matching("pathLower ==[c] %@", args: [pathLower], in: context).first
     }
 
-    func update(from metadata: Files.FileMetadata) {
+    internal func update(from metadata: Files.FileMetadata) {
         dropboxId = metadata.id
         pathLower = metadata.pathLower!
         rev = metadata.rev
         modified = metadata.serverModified
         contentHash = metadata.contentHash!
     }
-
 }

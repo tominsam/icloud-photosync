@@ -13,7 +13,7 @@ public protocol Reusable {
 }
 
 public extension UICollectionView {
-    func registerReusableCell<T>(_ klass: T.Type) where T: Reusable, T: UICollectionViewCell {
+    func registerReusableCell<T>(_: T.Type) where T: Reusable, T: UICollectionViewCell {
         register(T.self, forCellWithReuseIdentifier: T.reuseIdentifier)
     }
 

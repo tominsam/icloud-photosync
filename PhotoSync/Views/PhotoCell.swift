@@ -6,8 +6,8 @@
 //  Copyright © 2020 Thomas Insam. All rights reserved.
 //
 
-import UIKit
 import Photos
+import UIKit
 
 class PhotoCell: UICollectionViewCell, Reusable {
     static var reuseIdentifier: String = "PhotoCell"
@@ -42,7 +42,8 @@ class PhotoCell: UICollectionViewCell, Reusable {
         ])
     }
 
-    required init?(coder: NSCoder) {
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
 
@@ -70,7 +71,5 @@ class PhotoCell: UICollectionViewCell, Reusable {
             imageView.image = nil
             imageRequestId = nil
         }
-
     }
-
 }

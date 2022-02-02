@@ -12,7 +12,7 @@ extension UIBarButtonItem {
     convenience init(title: String, action: @escaping () -> Void) {
         self.init(title: title, style: .plain, target: nil, action: nil)
         closureSleeve = ClosureSleeve(closure: action)
-        self.target = closureSleeve
+        target = closureSleeve
         self.action = #selector(ClosureSleeve.invoke)
     }
 }

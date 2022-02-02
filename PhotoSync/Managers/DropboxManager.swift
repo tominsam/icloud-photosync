@@ -6,143 +6,97 @@
 //  Copyright © 2020 Thomas Insam. All rights reserved.
 //
 
-import UIKit
 import CoreData
-import SwiftyDropbox
-import KeychainSwift
 import Photos
+import SwiftyDropbox
+import UIKit
 
-extension NSNotification.Name {
-    static let DropboxManagerSyncProgress = NSNotification.Name("DropboxManagerSyncProgress")
-}
+class DropboxManager {
+    public var state: ServiceState?
 
-class DropboxManager: NSObject {
+    let persistentContainer: NSPersistentContainer
+    let dropboxClient: DropboxClient
+    let progressUpdate: @MainActor(ServiceState) -> Void
 
-    static let KeychainDropboxAccessToken = "KeychainDropboxAccessToken"
-
-    enum State {
-        case notStarted
-        case syncing
-        case error(String)
-        case finished
-    }
-    public private(set) var state: State = .notStarted
-    public let progress = Progress()
-    public var isLoggedIn: Bool { return dropboxClient != nil }
-    public var dropboxClient: DropboxClient?
-
-    private let persistentContainer = AppDelegate.shared.persistentContainer
-    private let keychain = KeychainSwift()
-
-    override init() {
-        super.init()
-        connect()
+    init(persistentContainer: NSPersistentContainer, dropboxClient: DropboxClient, progressUpdate: @escaping (ServiceState) -> Void) {
+        self.persistentContainer = persistentContainer
+        self.dropboxClient = dropboxClient
+        self.progressUpdate = progressUpdate
     }
 
-    func connect() {
-        assert(Thread.isMainThread)
-        if let accessToken = keychain.get(Self.KeychainDropboxAccessToken) {
-            dropboxClient = DropboxClient(accessToken: accessToken)
-        } else {
-            dropboxClient = nil
-        }
-    }
-
-    func logIn(accessToken: String) {
-        assert(Thread.isMainThread)
-        keychain.set(accessToken, forKey: Self.KeychainDropboxAccessToken)
-        connect()
-        sync()
-    }
-
-    func logOut() {
-        assert(Thread.isMainThread)
-        dropboxClient?.auth.tokenRevoke().response { _, _ in
-            // We don't care if there are errors
-        }
-        keychain.delete(Self.KeychainDropboxAccessToken)
-        dropboxClient = nil
-        state = .notStarted
-        sync()
-    }
-
-    func sync() {
-        assert(Thread.isMainThread)
-        guard let client = dropboxClient else {
-            progress.totalUnitCount = 0
-            progress.completedUnitCount = 0
-            self.progress.pause()
-            NotificationCenter.default.post(name: .PhotoKitManagerSyncProgress, object: self.progress)
+    func sync() async throws {
+        if state != nil {
             return
         }
-        if case .syncing = state { return }
-        state = .syncing
-        progress.totalUnitCount = Int64(DropboxFile.count(in: persistentContainer.viewContext))
-        progress.completedUnitCount = 0
+        assert(state == nil)
+        state = ServiceState()
+        let context = persistentContainer.newBackgroundContext()
+
+        // This is a guess, of course - we don't get a count from DB
+        // at any point, so the best number we have is "the last number"
+        state?.total = await context.perform {
+            DropboxFile.count(in: context)
+        }
+        await progressUpdate(state!)
 
         let runIdentifier = UUID().uuidString
 
-        client.files.listFolder(path: "", recursive: true).response { [unowned self] listResult, error in
-            if let error = error {
-                NSLog("Dropbox error: %@", error.description)
-                self.state = .error(error.description)
-                if case .authError = error {
-                    self.logOut()
-                }
-            } else {
-                self.handlePage(listResult!, runIdentifier: runIdentifier)
-            }
+        // Get the first page of results (DB has a cursor-based pagination API for
+        // large results, and this is probably a large result). Path is "" - this isn't
+        // the root of the Dropbox, this is the root of the app-specific folder we own.
+        var listResult = try await dropboxClient.files.listFolder(path: "", recursive: true).asyncResponse()
+        try await insertPage(listResult: listResult, runIdentifier: runIdentifier, progressUpdate: progressUpdate)
+
+        // While there are more results, fetch and insert the next page
+        while listResult.hasMore {
+            listResult = try await dropboxClient.files.listFolderContinue(cursor: listResult.cursor).asyncResponse()
+            try await insertPage(listResult: listResult, runIdentifier: runIdentifier, progressUpdate: progressUpdate)
         }
+
+        // Once we've fetched everything, remove from the database anything that wasn't fetched
+        // (and that must therefore have been removed)
+        try await removeRemainder(runIdentifier: runIdentifier)
+
+        NSLog("%@", "File sync complete")
+        state?.complete = true
+        await progressUpdate(state!)
     }
 
-    func handlePage(_ listResult: Files.ListFolderResult, runIdentifier: String) {
-        guard let client = dropboxClient else { return }
-
-        // Only consider actual files
+    func insertPage(listResult: Files.ListFolderResult, runIdentifier: String, progressUpdate: @MainActor @escaping (ServiceState) -> Void) async throws {
+        // Only consider actual files (the sync response is very complicated and can contain
+        // folders and deleted files, but I'm not bothering with any of that - I just want a
+        // list of all the files, and I'll remove everything else at the end.
         let fileMetadata = listResult.entries.compactMap { $0 as? Files.FileMetadata }
+        NSLog("%@", "Inserting / updating \(fileMetadata.count) file(s)")
 
-        persistentContainer.performBackgroundTask { [unowned self] context in
-            NSLog("Inserting / updating \(fileMetadata.count) file(s)")
+        let context = persistentContainer.newBackgroundContext()
+        let total = try await context.perform { () -> Int in
             DropboxFile.insertOrUpdate(fileMetadata, syncRun: runIdentifier, into: context)
-
-            if listResult.hasMore {
-                client.files.listFolderContinue(cursor: listResult.cursor).response { [unowned self] listResult, error in
-                    if let error = error {
-                        NSLog("Dropbox error: %@", error.description)
-                        self.state = .error(error.description)
-                        if case .authError = error {
-                            self.logOut()
-                        }
-                    } else {
-                        self.handlePage(listResult!, runIdentifier: runIdentifier)
-                    }
-                }
-
-            } else {
-                let removed = DropboxFile.matching("syncRun != %@", args: [runIdentifier], in: context)
-                if !removed.isEmpty {
-                    NSLog("Removing \(removed.count) deleted file(s)")
-                    for file in removed {
-                        context.delete(file)
-                    }
-                }
-                NSLog("File sync complete")
-                self.state = .finished
-            }
-
-            try! context.save()
-
-            // We can't actually count these, so we'll do our best
-            self.progress.completedUnitCount += Int64(fileMetadata.count)
-            self.progress.totalUnitCount = max(
-                self.progress.totalUnitCount,
-                Int64(DropboxFile.count(in: context)))
-
-            DispatchQueue.main.async { [unowned self] in
-                NotificationCenter.default.post(name: .PhotoKitManagerSyncProgress, object: self.progress)
-            }
+            try context.save()
+            return DropboxFile.count(in: context)
         }
 
+        state?.progress += fileMetadata.count
+        state?.total = total
+
+        await progressUpdate(state!)
     }
 
+    // Any file in the database with a _different_ run identifier wasn't inserted in this
+    // path, so it must have been removed on the dropbox side of things. Delete it from the
+    // local database.
+    func removeRemainder(runIdentifier: String) async throws {
+        let context = persistentContainer.newBackgroundContext()
+        let removed = DropboxFile.matching("syncRun != %@", args: [runIdentifier], in: context)
+        if removed.isEmpty {
+            return
+        }
+        NSLog("%@", "Removing \(removed.count) deleted file(s)")
+        try await context.perform {
+            for file in removed {
+                context.delete(file)
+            }
+            try context.save()
+        }
+    }
 }

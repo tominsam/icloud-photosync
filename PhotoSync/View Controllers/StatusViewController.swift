@@ -9,10 +9,7 @@
 import UIKit
 
 class StatusViewController: UIViewController {
-
-    private var dropboxManager = AppDelegate.shared.dropboxManager
-    private var photoKitManager = AppDelegate.shared.photoKitManager
-    private var syncManager = AppDelegate.shared.syncManager
+    private var syncManager: SyncManager
 
     lazy var photoKitStatusTitle = UILabel().configured {
         $0.text = "Photo Database"
@@ -66,6 +63,17 @@ class StatusViewController: UIViewController {
         $0.separatorStyle = .none
     }
 
+    init(syncManager: SyncManager) {
+        self.syncManager = syncManager
+        super.init(nibName: nil, bundle: nil)
+        syncManager.delegate = self
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .systemBackground
@@ -86,60 +94,54 @@ class StatusViewController: UIViewController {
 
         view.addSubviewWithInsets(mainStack)
 
-        NotificationCenter.default.addObserver(self, selector: #selector(syncProgress(_:)), name: .PhotoKitManagerSyncProgress, object: nil)
-        NotificationCenter.default.addObserver(self, selector: #selector(syncProgress(_:)), name: .DropboxManagerSyncProgress, object: nil)
-        NotificationCenter.default.addObserver(self, selector: #selector(syncProgress(_:)), name: .SyncManagerSyncProgress, object: nil)
         render()
-    }
-
-    @objc func syncProgress(_ notification: Notification) {
-        render()
-        // TODO HACK start the upload once the files and photos are done, assuming it's not already started
-        if syncManager.canSync, case .notStarted = syncManager.state {
-            syncManager.sync()
-        }
     }
 
     func render() {
-        switch photoKitManager.state {
-        case .notStarted:
+        switch syncManager.photoState {
+        case .none:
             photoKitStatusLabel.text = "Not started"
-        case .syncing:
-            photoKitStatusLabel.text = "Syncing (\(photoKitManager.progress.completedUnitCount) / \(photoKitManager.progress.totalUnitCount) photos)"
-        case .finished:
-            photoKitStatusLabel.text = "Finished (\(photoKitManager.progress.totalUnitCount) photos)"
+        case let .some(serviceState):
+            if serviceState.complete {
+                photoKitStatusLabel.text = "Finished (\(serviceState.total) photos)"
+            } else {
+                photoKitStatusLabel.text = "Syncing (\(serviceState.progress) / \(serviceState.total) photos)"
+            }
         }
 
-        switch dropboxManager.state {
-        case .notStarted:
+        switch syncManager.dropboxState {
+        case .none:
             dropboxStatusLabel.text = "Not started"
-        case .syncing:
-            dropboxStatusLabel.text = "Syncing (\(dropboxManager.progress.completedUnitCount) / \(dropboxManager.progress.totalUnitCount) files)"
-        case .finished:
-            dropboxStatusLabel.text = "Finished (\(dropboxManager.progress.totalUnitCount) files)"
-        case .error(let error):
-            dropboxStatusLabel.text = "Error: \(error)"
+        case let .some(serviceState):
+            if serviceState.complete {
+                dropboxStatusLabel.text = "Finished (\(serviceState.total) files)"
+            } else {
+                dropboxStatusLabel.text = "Syncing (\(serviceState.progress) / \(serviceState.total) files)"
+            }
+            if !serviceState.errors.isEmpty {
+                dropboxStatusLabel.text = "Error: \(serviceState.errors)"
+            }
         }
 
-        switch syncManager.state {
-        case .notStarted:
+        switch syncManager.uploadState {
+        case .none:
             syncStatusLabel.text = "Not started"
-        case .syncing:
-            syncStatusLabel.text = "Uploading \(syncManager.progress.completedUnitCount) / \(syncManager.progress.totalUnitCount)"
-        case .finished:
-            syncStatusLabel.text = "Success!"
-        case .error(let errors):
-            syncStatusLabel.text = "Failed (\(errors.count) errors)"
+        case let .some(serviceState):
+            if !serviceState.errors.isEmpty {
+                syncStatusLabel.text = "Failed (\(serviceState.errors.count) errors)"
+            } else if serviceState.complete {
+                syncStatusLabel.text = "Success!"
+            } else {
+                syncStatusLabel.text = "Uploading \(serviceState.progress) / \(serviceState.total)"
+            }
         }
 
         errorsView.reloadData()
-
     }
-
 }
 
 extension StatusViewController: UITableViewDataSource, UITableViewDelegate {
-    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+    func tableView(_: UITableView, numberOfRowsInSection _: Int) -> Int {
         return syncManager.errors.count
     }
 
@@ -147,5 +149,11 @@ extension StatusViewController: UITableViewDataSource, UITableViewDelegate {
         let cell = tableView.dequeueReusableCell(withIdentifier: "Boring", for: indexPath)
         cell.textLabel?.text = syncManager.errors[indexPath.row]
         return cell
+    }
+}
+
+extension StatusViewController: SyncManagerDelegate {
+    func syncManagerUpdatedState(_: SyncManager) {
+        render()
     }
 }

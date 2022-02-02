@@ -14,6 +14,5 @@ extension UIAlertController {
         let action = UIAlertAction(title: action, style: .default, handler: handler)
         controller.addAction(action)
         return controller
-
     }
 }

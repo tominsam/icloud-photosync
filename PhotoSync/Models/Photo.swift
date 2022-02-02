@@ -6,19 +6,18 @@
 //  Copyright © 2020 Thomas Insam. All rights reserved.
 //
 
-import Foundation
 import CoreData
+import Foundation
 import Photos
 
 @objc(Photo)
 public class Photo: NSManagedObject, ManagedObject {
-
     public static var defaultSortDescriptors: [NSSortDescriptor] {
         return [NSSortDescriptor(key: "created", ascending: false)]
     }
 
     // Properties from photokit
-    @NSManaged public var photoKitId: String
+    @NSManaged public var photoKitId: String!
     @NSManaged public var created: Date?
     @NSManaged public var modified: Date?
     // The path we want the image to have on disk. Derived from photokit data
@@ -34,10 +33,9 @@ public class Photo: NSManagedObject, ManagedObject {
     @NSManaged public var uploadRun: String?
 }
 
-extension Photo {
-
+public extension Photo {
     @discardableResult
-    public static func insertOrUpdate(_ assets: [PHAsset], into context: NSManagedObjectContext) -> [Photo] {
+    static func insertOrUpdate(_ assets: [PHAsset], into context: NSManagedObjectContext) -> [Photo] {
         guard !assets.isEmpty else { return [] }
         let existing = Photo.matching("photoKitId IN (%@)", args: [assets.map { $0.localIdentifier }], in: context).uniqueBy(\.photoKitId)
         return assets.map { asset in
@@ -47,7 +45,7 @@ extension Photo {
         }
     }
 
-    public static func forAsset(_ asset: PHAsset, in context: NSManagedObjectContext) -> Photo? {
+    static func forAsset(_ asset: PHAsset, in context: NSManagedObjectContext) -> Photo? {
         return Photo.matching("photoKitId = %@", args: [asset.localIdentifier], in: context).first
     }
 
@@ -61,22 +59,24 @@ extension Photo {
             path = nil
             modified = asset.modificationDate
         }
+        // We're storing a path for the image in core data rather than deriving it every time, because
+        // (a) it's slow to derive (because fetching the file type is expensive) and (b) we want it to be
+        // consistent for every run of the app.
         if path == nil {
-            // dropboxPath is somewhat slow, so the first sync of photos takes a lot
-            // longer, but everything downstream of this is much easier if I can rely
-            // on this field.
-            var path = asset.dropboxPath
+            var path = asset.dropboxPath // slow!
 
-            // Are there any existing photos with this exact path?
-            while Photo.count("path == %@ && photoKitId != %@", args: [path, photoKitId], in: managedObjectContext!) > 0 {
+            // Are there any existing photos with this exact path? Can happen, Photos
+            // makes no attempt to keep filenames unique. Keep appending a number to the
+            // filename until we get something unique. Remember that files systems are
+            // often not case sensitive!
+            while Photo.count("path ==[c] %@ && photoKitId != %@", args: [path, photoKitId!], in: managedObjectContext!) > 0 {
                 let newPath = path.incrementFilenameMagicNumber()
-                NSLog("Generating new version of \(path) -> \(newPath)")
+                NSLog("%@", "Generating new version of \(path) -> \(newPath)")
                 path = newPath
             }
             self.path = path
         }
     }
-
 }
 
 extension String {
@@ -90,7 +90,7 @@ extension String {
 
         // Look for an existing " (1)" at the end of the filename and extract it if present
         let index: Int
-        if let match = Self.trailingDigit.firstMatch(in: filename, options: [], range: NSRange(filename.startIndex..<filename.endIndex, in: filename)) {
+        if let match = Self.trailingDigit.firstMatch(in: filename, options: [], range: NSRange(filename.startIndex ..< filename.endIndex, in: filename)) {
             let filenameRange = Range(match.range(at: 1), in: filename)!
             let indexRange = Range(match.range(at: 2), in: filename)!
             index = Int(String(filename[indexRange]))!
@@ -106,5 +106,4 @@ extension String {
         // Glue the path back together
         return ((prefix as NSString).appendingPathComponent(filename + suffix) as NSString).appendingPathExtension(pathExtension)!
     }
-
 }

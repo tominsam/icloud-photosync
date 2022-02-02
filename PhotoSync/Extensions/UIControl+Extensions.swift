@@ -17,13 +17,12 @@ class ClosureSleeve {
 
     @objc
     func invoke() {
-        self.closure()
+        closure()
     }
 }
 
 extension NSObject {
-
-    private struct ClosureSleeveKey {
+    private enum ClosureSleeveKey {
         static var closureSleeve = "closureSleeve"
     }
 

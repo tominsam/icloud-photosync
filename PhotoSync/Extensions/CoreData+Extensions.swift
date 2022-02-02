@@ -30,8 +30,8 @@ extension ManagedObject {
         return request
     }
 
-    static func matching(_ predicate: String? = nil, args: [Any] = [], limit: Int? = nil, in context: NSManagedObjectContext) -> [Self] {
-        let fetchRequest = self.fetch(with: NSPredicate(format: predicate ?? "1=1", argumentArray: args))
+    static func matching(_ predicate: String, args: [Any] = [], limit: Int? = nil, in context: NSManagedObjectContext) -> [Self] {
+        let fetchRequest = fetch(with: NSPredicate(format: predicate, argumentArray: args))
         if let limit = limit {
             fetchRequest.fetchLimit = limit
         }
@@ -39,13 +39,13 @@ extension ManagedObject {
     }
 
     static func count(_ predicate: String? = nil, args: [Any] = [], in context: NSManagedObjectContext) -> Int {
-        let fetchRequest = self.fetch(with: NSPredicate(format: predicate ?? "1=1", argumentArray: args))
+        let fetchRequest = fetch(with: NSPredicate(format: predicate ?? "1=1", argumentArray: args))
         return try! context.count(for: fetchRequest)
     }
 }
 
-extension NSManagedObject {
-    public static var entityName: String {
+public extension NSManagedObject {
+    static var entityName: String {
         return entity().managedObjectClassName
     }
 }

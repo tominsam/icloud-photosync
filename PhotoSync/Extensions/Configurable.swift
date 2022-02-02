@@ -8,7 +8,7 @@
 
 import Foundation
 
-internal protocol Configurable { }
+internal protocol Configurable {}
 
 extension Configurable {
     func configured(with: (inout Self) throws -> Void) rethrows -> Self {
@@ -18,4 +18,4 @@ extension Configurable {
     }
 }
 
-extension NSObject: Configurable { }
+extension NSObject: Configurable {}

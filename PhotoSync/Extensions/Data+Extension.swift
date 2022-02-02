@@ -6,11 +6,12 @@
 //  Copyright © 2020 Thomas Insam. All rights reserved.
 //
 
-import Foundation
 import CryptoKit
+import Foundation
+import FileProvider
+import AVFoundation
 
 extension InputStream {
-
     private static func sha256(data: Data) -> Data {
         return Data(CryptoKit.SHA256.hash(data: data))
     }
@@ -45,12 +46,16 @@ extension InputStream {
 
         return hexString
     }
-
 }
 
 extension Data {
     func dropboxContentHash() -> String? {
         return InputStream(data: self).dropboxContentHash()
     }
+}
 
+extension AVURLAsset {
+    func dropboxContentHash() -> String? {
+        return InputStream(url: url)?.dropboxContentHash()
+    }
 }

@@ -1,5 +1,5 @@
 #!/bin/bash -ex
-killall Xcode
+killall Xcode || true
 
 sleep 2
 

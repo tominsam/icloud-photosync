@@ -9,13 +9,16 @@ packages:
   KeychainSwift:
     url: https://github.com/evgenyneu/keychain-swift.git
     revision: 32a99b537d1c6f3529a08257c28a5feb70c0c5af
+  CollectionConcurrencyKit:
+    url: https://github.com/JohnSundell/CollectionConcurrencyKit.git
+    revision: b4f23e24b5a1bff301efc5e70871083ca029ff95
 
 targets:
   PhotoSync:
     name: PhotoSync
     type: application
     platform: iOS
-    deploymentTarget: "14.0"
+    deploymentTarget: "15.0"
     scheme: {}
     settings:
       base:
@@ -39,6 +42,7 @@ targets:
     dependencies:
       - package: SwiftyDropbox
       - package: KeychainSwift
+      - package: CollectionConcurrencyKit
     info:
       path: Info.plist
       properties:
@@ -54,6 +58,13 @@ targets:
         UIViewControllerBasedStatusBarAppearance: true
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
+        LSApplicationQueriesSchemes:
+          - dbapi-8-emm
+          - dbapi-2
+        CFBundleURLTypes:
+          - CFBundleURLName: ""
+            CFBundleURLSchemes:
+              - db-ru820t3myp7s6vk
 #        UIApplicationSceneManifest:
 #          UIApplicationSupportsMultipleScenes: false
 #          UISceneConfigurations:

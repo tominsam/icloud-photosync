@@ -9,7 +9,6 @@
 import Photos
 
 extension PHAsset {
-
     static var dateFormatter: DateFormatter = {
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy/MM"
@@ -20,7 +19,7 @@ extension PHAsset {
     /// milliseconds) so exercise caution - don't call it on first sync.
     var dropboxPath: String {
         let datePath: String
-        if let creationDate = self.creationDate {
+        if let creationDate = creationDate {
             // Can we get a timezone from the photo location? Assume the photo was taken in that TZ
             if let location = location, let timezone = TimezoneMapper.latLngToTimezone(location.coordinate) {
                 Self.dateFormatter.timeZone = timezone
@@ -35,7 +34,9 @@ extension PHAsset {
         }
 
         // This includes the file extension.
-        let filename = (PHAssetResource.assetResources(for: self).first(where: { $0.type == .photo || $0.type == .video })?.originalFilename)!
-        return "/\(datePath)/\(filename)"
+        let filename = (PHAssetResource.assetResources(for: self)
+            .first(where: { [.photo, .video, .fullSizePhoto, .fullSizeVideo].contains($0.type) })?
+            .originalFilename)!
+        return "/\(datePath)/\(filename)".lowercased()
     }
 }

@@ -6,50 +6,49 @@
 //  Copyright © 2020 Thomas Insam. All rights reserved.
 //
 
-import UIKit
 import CoreData
-import SwiftyDropbox
 import Photos
+import SwiftyDropbox
+import UIKit
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
-
-    static var shared = UIApplication.shared.delegate as! AppDelegate
-
     lazy var window: UIWindow? = UIWindow()
     lazy var navigationController = UINavigationController()
 
     lazy var persistentContainer: NSPersistentContainer = {
         let persistentContainer = NSPersistentContainer(name: "PhotoSync")
+
+        var failed = false
         // this completion handler is called synchonously by default
         persistentContainer.loadPersistentStores(completionHandler: { _, error in
             if let error = error as NSError? {
-                // If there's an error, just dump the database on the floor
-                let alert = UIAlertController.simpleAlert(title: "Database Error", message: error.localizedDescription, action: "Reset Database") { _ in
-                    // TODO this is the entire application support folder, it's way too destuctive and the app doesn't recover from this
-                    try! FileManager.default.removeItem(at: NSPersistentContainer.defaultDirectoryURL())
-                    persistentContainer.loadPersistentStores { _, error in
-                        if let error = error as NSError? {
-                            fatalError(error.localizedDescription)
-                        }
-                    }
-                }
-                self.navigationController.present(alert, animated: true, completion: nil)
+                failed = true
             }
         })
+        // If store creation failed, delete the database and try again (it's just a cache)
+        if failed {
+            NSLog("%@", "Failed to open database, re-creating")
+            let storeURL = persistentContainer.persistentStoreCoordinator.persistentStores.first!.url!
+            try! persistentContainer.persistentStoreCoordinator.destroyPersistentStore(at: storeURL, ofType: NSSQLiteStoreType, options: nil)
+            persistentContainer.loadPersistentStores { _, error in
+                if let error = error as NSError? {
+                    fatalError(error.localizedDescription)
+                }
+            }
+        }
+
         persistentContainer.viewContext.automaticallyMergesChangesFromParent = true
         return persistentContainer
     }()
 
-    lazy var photoKitManager = PhotoKitManager()
-    lazy var dropboxManager = DropboxManager()
-    lazy var syncManager = SyncManager()
+    lazy var syncManager = SyncManager(persistentContainer: persistentContainer)
 
-    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+    func application(_: UIApplication, didFinishLaunchingWithOptions _: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         DropboxClientsManager.setupWithAppKey("ru820t3myp7s6vk")
         window!.rootViewController = navigationController
         window!.makeKeyAndVisible()
-        navigationController.viewControllers = [StatusViewController()]
+        navigationController.viewControllers = [StatusViewController(syncManager: syncManager)]
         // navigationController.viewControllers = [PhotosViewController()]
         updateDropboxNavigationItem()
         startDropboxSync()
@@ -57,15 +56,16 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         return true
     }
 
-    func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
+    func application(_: UIApplication, open url: URL, options _: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
         return DropboxClientsManager.handleRedirectURL(url) { authResult in
             switch authResult {
-            case .success(let accessToken):
-                self.dropboxManager.logIn(accessToken: accessToken.accessToken)
+            case let .success(accessToken):
+                self.syncManager.logIn(accessToken: accessToken.accessToken)
                 self.updateDropboxNavigationItem()
+                self.syncManager.maybeSync()
             case .cancel:
                 break
-            case .error(_, let description):
+            case let .error(_, description):
                 self.navigationController.present(UIAlertController.simpleAlert(
                     title: "Dropbox Error",
                     message: description ?? "Unknown error",
@@ -77,8 +77,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         }
     }
 
-    func applicationDidBecomeActive(_ application: UIApplication) {
-    }
+    func applicationDidBecomeActive(_: UIApplication) {}
 
     func startPhotoSync() {
         // Request photo access if we need it
@@ -90,37 +89,37 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
                 }
             }
         case .authorized:
-            photoKitManager.sync()
+            syncManager.maybeSync()
         default:
-            // TODO
+            // TODO: open settings or something, don't use alert here, etc.
             let alert = UIAlertController.simpleAlert(title: "Error", message: "Photo permission", action: "OK") { _ in
-                // TODO open settings or something
             }
             navigationController.present(alert, animated: true, completion: nil)
         }
     }
 
     func startDropboxSync() {
-        dropboxManager.sync()
+        syncManager.maybeSync()
     }
 
     func updateDropboxNavigationItem() {
         let item: UIBarButtonItem
-        if dropboxManager.isLoggedIn {
+        if syncManager.isLoggedIn {
             item = UIBarButtonItem(title: "Log out", action: {
-                self.dropboxManager.logOut()
+                self.syncManager.logOut()
                 self.updateDropboxNavigationItem()
+                self.startDropboxSync()
             })
         } else {
             item = UIBarButtonItem(title: "Connect to Dropbox", action: {
                 DropboxClientsManager.authorizeFromController(
                     UIApplication.shared,
                     controller: self.navigationController,
-                    openURL: { UIApplication.shared.open($0, options: [:], completionHandler: nil) })
+                    openURL: { UIApplication.shared.open($0, options: [:], completionHandler: nil) }
+                )
             })
         }
 
         navigationController.viewControllers.first?.navigationItem.rightBarButtonItem = item
     }
-
 }
