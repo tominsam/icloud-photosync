@@ -58,7 +58,7 @@ class StatusViewController: UIViewController {
         $0.tableFooterView = UIView()
         $0.dataSource = self
         $0.delegate = self
-        $0.register(UITableViewCell.self, forCellReuseIdentifier: "Boring")
+        $0.register(ErrorCell.self, forCellReuseIdentifier: "ErrorCell")
         $0.estimatedRowHeight = UITableView.automaticDimension
         $0.separatorStyle = .none
     }
@@ -103,9 +103,13 @@ class StatusViewController: UIViewController {
             photoKitStatusLabel.text = "Not started"
         case let .some(serviceState):
             if serviceState.complete {
-                photoKitStatusLabel.text = "Finished (\(serviceState.total) photos)"
+                if serviceState.errors.isEmpty {
+                    photoKitStatusLabel.text = "Complete (found \(serviceState.total) photos)"
+                } else {
+                    photoKitStatusLabel.text = "Failed (\(serviceState.errors.count) errors)"
+                }
             } else {
-                photoKitStatusLabel.text = "Syncing (\(serviceState.progress) / \(serviceState.total) photos)"
+                photoKitStatusLabel.text = "Fetching \(serviceState.progress) / \(serviceState.total)"
             }
         }
 
@@ -114,12 +118,13 @@ class StatusViewController: UIViewController {
             dropboxStatusLabel.text = "Not started"
         case let .some(serviceState):
             if serviceState.complete {
-                dropboxStatusLabel.text = "Finished (\(serviceState.total) files)"
+                if serviceState.errors.isEmpty {
+                    dropboxStatusLabel.text = "Complete (found \(serviceState.total) files)"
+                } else {
+                    dropboxStatusLabel.text = "Failed (\(serviceState.errors.count) errors)"
+                }
             } else {
-                dropboxStatusLabel.text = "Syncing (\(serviceState.progress) / \(serviceState.total) files)"
-            }
-            if !serviceState.errors.isEmpty {
-                dropboxStatusLabel.text = "Error: \(serviceState.errors)"
+                dropboxStatusLabel.text = "Checking \(serviceState.progress) / \(serviceState.total)"
             }
         }
 
@@ -127,10 +132,12 @@ class StatusViewController: UIViewController {
         case .none:
             syncStatusLabel.text = "Not started"
         case let .some(serviceState):
-            if !serviceState.errors.isEmpty {
-                syncStatusLabel.text = "Failed (\(serviceState.errors.count) errors)"
-            } else if serviceState.complete {
-                syncStatusLabel.text = "Success!"
+            if serviceState.complete {
+                if serviceState.errors.isEmpty {
+                    syncStatusLabel.text = "Complete"
+                } else {
+                    syncStatusLabel.text = "Failed (\(serviceState.errors.count) errors)"
+                }
             } else {
                 syncStatusLabel.text = "Uploading \(serviceState.progress) / \(serviceState.total)"
             }
@@ -146,8 +153,10 @@ extension StatusViewController: UITableViewDataSource, UITableViewDelegate {
     }
 
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        let cell = tableView.dequeueReusableCell(withIdentifier: "Boring", for: indexPath)
-        cell.textLabel?.text = syncManager.errors[indexPath.row]
+        let cell = tableView.dequeueReusableCell(withIdentifier: "ErrorCell", for: indexPath)
+        let row = syncManager.errors.count - indexPath.row - 1
+        cell.textLabel?.text = syncManager.errors[row].path
+        cell.detailTextLabel?.text = syncManager.errors[row].message
         return cell
     }
 }

@@ -54,8 +54,8 @@ extension Data {
     }
 }
 
-extension AVURLAsset {
+extension URL {
     func dropboxContentHash() -> String? {
-        return InputStream(url: url)?.dropboxContentHash()
+        return InputStream(url: self)?.dropboxContentHash()
     }
 }

@@ -7,11 +7,15 @@ import Photos
 import SwiftyDropbox
 import UIKit
 
+struct ServiceError {
+    let path: String
+    let message: String
+}
 struct ServiceState {
     var progress: Int = 0
     var total: Int = 0
     var complete: Bool = false
-    var errors: [String] = []
+    var errors: [ServiceError] = []
 }
 
 protocol SyncManagerDelegate: NSObjectProtocol {
@@ -25,10 +29,13 @@ class SyncManager {
     let persistentContainer: NSPersistentContainer
 
     var syncing: Bool = false
-    var errors: [String] = []
     var photoState: ServiceState?
     var dropboxState: ServiceState?
     var uploadState: ServiceState?
+
+    var errors: [ServiceError] {
+        return (photoState?.errors ?? []) + (dropboxState?.errors ?? []) + (uploadState?.errors ?? [])
+    }
 
     public weak var delegate: SyncManagerDelegate?
 
@@ -76,17 +83,14 @@ class SyncManager {
         syncing = true
 
         let photoManager = PhotoKitManager(persistentContainer: persistentContainer) { progress in
-            NSLog("photo progress is %@", String(describing: progress))
             self.photoState = progress
             self.delegate?.syncManagerUpdatedState(self)
         }
         let dropboxManager = DropboxManager(persistentContainer: persistentContainer, dropboxClient: client) { progress in
-            NSLog("dropbox progress is %@", String(describing: progress))
             self.dropboxState = progress
             self.delegate?.syncManagerUpdatedState(self)
         }
         let uploadManager = UploadManager(persistentContainer: persistentContainer, dropboxClient: client) { progress in
-            NSLog("upload progress is %@", String(describing: progress))
             self.uploadState = progress
             self.delegate?.syncManagerUpdatedState(self)
         }
@@ -104,6 +108,11 @@ class SyncManager {
             } catch let error {
                 fatalError(error.localizedDescription)
             }
+            if dropboxState?.errors.isEmpty != true && photoState?.errors.isEmpty != true {
+                NSLog("There are errors in initial sync!")
+                return
+            }
+
             do {
                 NSLog("%@", "Starting upload")
                 try await uploadManager.sync()

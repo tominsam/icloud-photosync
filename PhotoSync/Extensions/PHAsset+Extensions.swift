@@ -8,6 +8,36 @@
 
 import Photos
 
+enum AssetData {
+    case data(Data)
+    case url(URL)
+
+    func dropboxContentHash() -> String? {
+        switch self {
+        case .data(let data):
+            return data.dropboxContentHash()
+        case .url(let url):
+            return url.dropboxContentHash()
+        }
+    }
+
+}
+
+enum AssetError: Error, LocalizedError {
+    case fetch(String)
+    case mediaType(PHAssetMediaType)
+
+    var errorDescription: String? {
+        switch self {
+        case .fetch(let message):
+            return message
+        case .mediaType(let mediaType):
+            return "Invalid media type \(mediaType)"
+        }
+    }
+}
+
+
 extension PHAsset {
     static var dateFormatter: DateFormatter = {
         let dateFormatter = DateFormatter()
@@ -39,4 +69,46 @@ extension PHAsset {
             .originalFilename)!
         return "/\(datePath)/\(filename)".lowercased()
     }
+
+    func getImageData() async throws -> AssetData {
+        let manager = PHImageManager.default()
+
+        switch mediaType {
+        case .image:
+            let options = PHImageRequestOptions()
+            options.deliveryMode = .highQualityFormat
+            options.version = .current // save out edited versions (or original if no edits)
+            options.isNetworkAccessAllowed = true // download if required
+            options.isSynchronous = true // block operation
+            return try await withCheckedThrowingContinuation { continuation in
+                manager.requestImageDataAndOrientation(for: self, options: options) { data, _, _, info in
+                    guard let data = data else {
+                        continuation.resume(throwing: AssetError.fetch("Can't fetch photo: \(info ?? [:])"))
+                        return
+                    }
+                    continuation.resume(returning: .data(data))
+                }
+            }
+
+        case .video:
+            let options = PHVideoRequestOptions()
+            options.deliveryMode = .highQualityFormat
+            options.version = .current // save out edited versions (or original if no edits)
+            options.isNetworkAccessAllowed = true // download if required
+            return try await withCheckedThrowingContinuation { continuation in
+                manager.requestAVAsset(forVideo: self, options: options) { avAsset, _, info in
+                    guard let avUrlAsset = avAsset as? AVURLAsset else {
+                        continuation.resume(throwing: AssetError.fetch("Can't fetch video: \(info ?? [:])"))
+                        return
+                    }
+                    continuation.resume(returning: .url(avUrlAsset.url))
+                }
+            }
+
+        default:
+            throw AssetError.mediaType(mediaType)
+        }
+
+    }
+
 }
