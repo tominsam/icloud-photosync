@@ -14,13 +14,12 @@ enum AssetData {
 
     func dropboxContentHash() -> String? {
         switch self {
-        case .data(let data):
+        case let .data(data):
             return data.dropboxContentHash()
-        case .url(let url):
+        case let .url(url):
             return url.dropboxContentHash()
         }
     }
-
 }
 
 enum AssetError: Error, LocalizedError {
@@ -29,14 +28,13 @@ enum AssetError: Error, LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .fetch(let message):
+        case let .fetch(message):
             return message
-        case .mediaType(let mediaType):
+        case let .mediaType(mediaType):
             return "Invalid media type \(mediaType)"
         }
     }
 }
-
 
 extension PHAsset {
     static var dateFormatter: DateFormatter = {
@@ -79,7 +77,6 @@ extension PHAsset {
             options.deliveryMode = .highQualityFormat
             options.version = .current // save out edited versions (or original if no edits)
             options.isNetworkAccessAllowed = true // download if required
-            options.isSynchronous = true // block operation
             return try await withCheckedThrowingContinuation { continuation in
                 manager.requestImageDataAndOrientation(for: self, options: options) { data, _, _, info in
                     guard let data = data else {
@@ -108,7 +105,5 @@ extension PHAsset {
         default:
             throw AssetError.mediaType(mediaType)
         }
-
     }
-
 }

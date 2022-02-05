@@ -11,7 +11,6 @@ enum UploadError: Error {
     case dropbox(String)
 }
 
-
 // Upload bundles of assets to dropbox at once - this is much much faster than uploading individually,
 // even though it's much more complicated, because Dropbox has internal transaction / locking that effectively
 // prevent me uploading more than one file at once.
@@ -94,9 +93,9 @@ class BatchUploader: LoggingOperation {
         // Upload the file to dropbox. This needs to be "finished", but we do that in batches.
         NSLog("%@", "Uploading \(task.filename) with \(hash) replacing \(task.existingContentHash ?? "nil")")
         switch data {
-        case .data(let data):
+        case let .data(data):
             return try await uploadData(dropboxClient: dropboxClient, task: task, data: data)
-        case .url(let url):
+        case let .url(url):
             return try await uploadUrl(dropboxClient: dropboxClient, task: task, url: url)
         }
     }
@@ -129,7 +128,7 @@ class BatchUploader: LoggingOperation {
         // Dropbox has a file size limit on upload chunks, so we'll batch the file off disk
         // in chunks and upload them piece by piece. Magic number here is from the DB docs -
         // chunk size must be a multiple of 4194304.
-        let chunkSize = 4194304 * 5
+        let chunkSize = 4_194_304 * 5
         let dataReader = try AsyncDataFetcher(url: url, chunkSize: chunkSize)
 
         // start upload with first chunk
@@ -151,7 +150,8 @@ class BatchUploader: LoggingOperation {
             try await dropboxClient.files.uploadSessionAppendV2(
                 cursor: cursor,
                 close: cursorOffset + nextData.count == totalFileSize,
-                input: nextData).asyncResponse()
+                input: nextData
+            ).asyncResponse()
             cursorOffset += nextData.count
         }
 
@@ -173,7 +173,7 @@ class BatchUploader: LoggingOperation {
     private static func finish(dropboxClient: DropboxClient, entries: [UploadResult]) async throws -> [FinishResult] {
         var finishArgs = [Files.UploadSessionFinishArg]()
         for entry in entries {
-            if case .success(_, let arg) = entry {
+            if case let .success(_, arg) = entry {
                 finishArgs.append(arg)
             }
         }
@@ -185,18 +185,18 @@ class BatchUploader: LoggingOperation {
         var finishResults = [FinishResult]()
         for entry in entries {
             switch entry {
-            case .success(let filename, _):
+            case let .success(filename, _):
                 let result: Files.UploadSessionFinishBatchResultEntry = mutableFinishResults.removeFirst()
                 switch result {
-                case .success(let metaData):
+                case let .success(metaData):
                     finishResults.append(.success(metaData))
-                case .failure(let error):
+                case let .failure(error):
                     finishResults.append(.failure(path: filename, message: error.description))
                 }
 
             case .unchanged:
                 finishResults.append(.unchanged)
-            case .failure(let path, let message):
+            case let .failure(path, message):
                 finishResults.append(.failure(path: path, message: message))
             }
         }
@@ -211,13 +211,11 @@ class BatchUploader: LoggingOperation {
         let context = persistentContainer.newBackgroundContext()
         try await context.perform {
             for result in finishResults {
-                if case .success(let metaData) = result {
+                if case let .success(metaData) = result {
                     DropboxFile.insertOrUpdate([metaData], syncRun: "", into: context)
                 }
             }
             try context.save()
         }
     }
-
 }
-

@@ -3,7 +3,6 @@
 import Foundation
 
 class AsyncDataFetcher: AsyncIteratorProtocol {
-
     typealias Element = Data
 
     let chunkSize: Int
@@ -11,7 +10,7 @@ class AsyncDataFetcher: AsyncIteratorProtocol {
 
     init(url: URL, chunkSize: Int) throws {
         self.chunkSize = chunkSize
-        self.fileHandle = try FileHandle(forReadingFrom: url)
+        fileHandle = try FileHandle(forReadingFrom: url)
     }
 
     deinit {
@@ -22,5 +21,4 @@ class AsyncDataFetcher: AsyncIteratorProtocol {
         let data = fileHandle.readData(ofLength: chunkSize)
         return data.isEmpty ? nil : data
     }
-
 }

@@ -1,11 +1,11 @@
 //  Copyright 2020 Thomas Insam. All rights reserved.
 
 import CoreData
+import CryptoKit
 import Foundation
 import Photos
 import SwiftyDropbox
 import UIKit
-import CryptoKit
 
 class UploadManager {
     let persistentContainer: NSPersistentContainer
@@ -21,7 +21,7 @@ class UploadManager {
     }
 
     func sync() async throws {
-        self.state = ServiceState()
+        state = ServiceState()
         let context = persistentContainer.newBackgroundContext()
         state!.total = await context.perform {
             Photo.count(in: context)
@@ -76,7 +76,6 @@ class UploadManager {
                 }
             }
 
-
             // this excludes the photos from the next loop - it's much safer than
             // paginating them, as long as there's only one instance of UploadManager
             // running at once.
@@ -94,16 +93,16 @@ class UploadManager {
 
             // When we accumulate 10 uploads, send them in a batch
             while uploads.count >= 10 {
-                let chunk = Array(uploads[0..<10])
+                let chunk = Array(uploads[0 ..< 10])
                 uploads = Array(uploads[10...])
-                try await self.upload(chunk)
+                try await upload(chunk)
 
                 state!.progress += chunk.count
                 await progressUpdate(state!)
             }
 
             if !deletions.isEmpty {
-                // TODO fix deletions
+                // TODO: fix deletions
                 //                for deletion in deletions {
                 //                    try await DeleteOperation.deleteFile(persistentContainer: persistentContainer, dropboxClient: dropboxClient, task: deletion)
                 //                }
@@ -111,13 +110,12 @@ class UploadManager {
                 await progressUpdate(state!)
                 deletions = []
             }
-
         }
 
-        try await self.upload(uploads)
-        //for deletion in deletions {
-            //            try await DeleteOperation.deleteFile(persistentContainer: persistentContainer, dropboxClient: dropboxClient, task: deletion)
-        //}
+        try await upload(uploads)
+        // for deletion in deletions {
+        //            try await DeleteOperation.deleteFile(persistentContainer: persistentContainer, dropboxClient: dropboxClient, task: deletion)
+        // }
 
         NSLog("%@", "Upload complete")
 
@@ -128,11 +126,10 @@ class UploadManager {
     func upload(_ tasks: [BatchUploader.UploadTask]) async throws {
         let finishResults = try await BatchUploader.batchUpload(persistentContainer: persistentContainer, dropboxClient: dropboxClient, tasks: tasks)
         for result in finishResults {
-            if case .failure(let path, let message) = result {
+            if case let .failure(path, message) = result {
                 state!.errors.append(ServiceError(path: path, message: message))
             }
         }
         await progressUpdate(state!)
-
     }
 }

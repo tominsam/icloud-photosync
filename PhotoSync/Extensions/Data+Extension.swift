@@ -6,10 +6,10 @@
 //  Copyright © 2020 Thomas Insam. All rights reserved.
 //
 
-import CryptoKit
-import Foundation
-import FileProvider
 import AVFoundation
+import CryptoKit
+import FileProvider
+import Foundation
 
 extension InputStream {
     private static func sha256(data: Data) -> Data {

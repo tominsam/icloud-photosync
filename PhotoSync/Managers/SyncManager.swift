@@ -11,6 +11,7 @@ struct ServiceError {
     let path: String
     let message: String
 }
+
 struct ServiceState {
     var progress: Int = 0
     var total: Int = 0
@@ -105,7 +106,7 @@ class SyncManager {
                 try await photoFetch
                 try await dropboxFetch
 
-            } catch let error {
+            } catch {
                 fatalError(error.localizedDescription)
             }
             if dropboxState?.errors.isEmpty != true && photoState?.errors.isEmpty != true {
@@ -117,7 +118,7 @@ class SyncManager {
                 NSLog("%@", "Starting upload")
                 try await uploadManager.sync()
                 syncing = false
-            } catch let error {
+            } catch {
                 NSLog("%@", "Upload failed - \(error) \(String(describing: error)) \(error.localizedDescription)")
                 fatalError(error.localizedDescription)
             }
