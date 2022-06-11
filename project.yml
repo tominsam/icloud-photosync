@@ -5,7 +5,7 @@ options:
 packages:
   SwiftyDropbox:
     url: https://github.com/dropbox/SwiftyDropbox.git
-    revision: 37355f57beee1843f1a8339350b4192f264230d1
+    revision: 81dee82b5e383afe4c00190efa5c64434ac39b53
   KeychainSwift:
     url: https://github.com/evgenyneu/keychain-swift.git
     revision: 32a99b537d1c6f3529a08257c28a5feb70c0c5af
@@ -30,7 +30,6 @@ targets:
     sources:
       - path: "PhotoSync"
         name: "Code"
-        compilerFlags: "-Xfrontend -warn-concurrency -Xfrontend -enable-actor-data-race-checks"
       - path: "README.md"
         buildPhase: none
       - path: "CHANGELOG.md"
@@ -38,6 +37,8 @@ targets:
       - path: "project.yml"
         buildPhase: none
       - path: ".swiftlint.yml"
+        buildPhase: none
+      - path: "Info.plist"
         buildPhase: none
     dependencies:
       - package: SwiftyDropbox
@@ -50,7 +51,7 @@ targets:
         LSApplicationCategoryType: public.app-category.developer-tools
         UILaunchScreen:
           UIColorName: LaunchBackground
-          UIImageName: LaunchIcon
+          UIImageName: AppIcon
         CFBundleShortVersionString: "1"
         CFBundleVersion: "1.0"
         ITSAppUsesNonExemptEncryption: false
@@ -81,3 +82,4 @@ targets:
     postCompileScripts:
       - script: /opt/homebrew/bin/swiftlint
         name: Run SwiftLint
+        basedOnDependencyAnalysis: false
