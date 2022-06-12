@@ -1,10 +1,4 @@
-//
-//  Photo.swift
-//  PhotoSync
-//
-//  Created by Thomas Insam on 4/10/20.
-//  Copyright © 2020 Thomas Insam. All rights reserved.
-//
+//  Copyright 2020 Thomas Insam. All rights reserved.
 
 import CoreData
 import Foundation
@@ -29,15 +23,13 @@ public class Photo: NSManagedObject, ManagedObject {
     // image data to calculate this, so I'll only set it when I
     // have read the image.
     @NSManaged public var contentHash: String?
-
-    @NSManaged public var uploadRun: String?
 }
 
 public extension Photo {
     @discardableResult
-    static func insertOrUpdate(_ assets: [PHAsset], into context: NSManagedObjectContext) -> [Photo] {
+    static func insertOrUpdate(_ assets: [PHAsset], into context: NSManagedObjectContext) async throws -> [Photo] {
         guard !assets.isEmpty else { return [] }
-        let existing = Photo.matching("photoKitId IN (%@)", args: [assets.map { $0.localIdentifier }], in: context).uniqueBy(\.photoKitId)
+        let existing = try await Photo.matching("photoKitId IN (%@)", args: [assets.map { $0.localIdentifier }], in: context).uniqueBy(\.photoKitId)
         return assets.map { asset in
             let photo = existing[asset.localIdentifier] ?? context.insertObject()
             photo.update(from: asset)
@@ -45,8 +37,8 @@ public extension Photo {
         }
     }
 
-    static func forAsset(_ asset: PHAsset, in context: NSManagedObjectContext) -> Photo? {
-        return Photo.matching("photoKitId = %@", args: [asset.localIdentifier], in: context).first
+    static func forAsset(_ asset: PHAsset, in context: NSManagedObjectContext) async throws -> Photo? {
+        return try await Photo.matching("photoKitId = %@", args: [asset.localIdentifier], in: context).first
     }
 
     private func update(from asset: PHAsset) {

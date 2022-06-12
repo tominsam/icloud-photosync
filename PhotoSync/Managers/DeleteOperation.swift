@@ -24,11 +24,11 @@ class DeleteOperation {
 
         // It's neither in the local store or the remote. We can remove it from the database
         let context = persistentContainer.newBackgroundContext()
-        try await context.perform {
-            if let photo = Photo.matching("photoKitId = %@", args: [task.photoKitId], in: context).first {
+        if let photo = try await Photo.matching("photoKitId = %@", args: [task.photoKitId], in: context).first {
+            try await context.perform {
                 context.delete(photo)
+                try context.save()
             }
-            try context.save()
         }
     }
 }

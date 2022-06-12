@@ -30,12 +30,14 @@ extension ManagedObject {
         return request
     }
 
-    static func matching(_ predicate: String, args: [Any] = [], limit: Int? = nil, in context: NSManagedObjectContext) -> [Self] {
-        let fetchRequest = fetch(with: NSPredicate(format: predicate, argumentArray: args))
+    static func matching(_ predicate: String?, args: [Any] = [], limit: Int? = nil, in context: NSManagedObjectContext) async throws -> [Self] {
+        let fetchRequest = fetch(with: NSPredicate(format: predicate ?? "1=1", argumentArray: args))
         if let limit = limit {
             fetchRequest.fetchLimit = limit
         }
-        return try! context.fetch(fetchRequest)
+        return try await context.perform {
+            try context.fetch(fetchRequest)
+        }
     }
 
     static func count(_ predicate: String? = nil, args: [Any] = [], in context: NSManagedObjectContext) -> Int {

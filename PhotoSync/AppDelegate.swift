@@ -112,11 +112,12 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             })
         } else {
             item = UIBarButtonItem(title: "Connect to Dropbox", action: {
-                DropboxClientsManager.authorizeFromController(
+                DropboxClientsManager.authorizeFromControllerV2(
                     UIApplication.shared,
                     controller: self.navigationController,
-                    openURL: { UIApplication.shared.open($0, options: [:], completionHandler: nil) }
-                )
+                    loadingStatusDelegate: nil,
+                    openURL: { UIApplication.shared.open($0, options: [:], completionHandler: nil) },
+                    scopeRequest: nil)
             })
         }
 

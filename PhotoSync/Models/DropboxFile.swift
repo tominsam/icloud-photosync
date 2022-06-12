@@ -21,25 +21,46 @@ public class DropboxFile: NSManagedObject, ManagedObject {
     @NSManaged public var rev: String
     @NSManaged public var contentHash: String
     @NSManaged public var modified: Date?
-    @NSManaged public var syncRun: String?
-    @NSManaged public var uploadRun: String?
 }
 
 public extension DropboxFile {
     @discardableResult
-    static func insertOrUpdate(_ metadatas: [Files.FileMetadata], syncRun: String, into context: NSManagedObjectContext) -> [DropboxFile] {
+    static func insertOrUpdate(_ metadatas: [Files.FileMetadata], delete deletedMetadatas: [Files.DeletedMetadata], into context: NSManagedObjectContext) async throws -> [DropboxFile] {
         guard !metadatas.isEmpty else { return [] }
-        let existing = DropboxFile.matching("pathLower IN (%@)", args: [metadatas.map { $0.pathLower! }], in: context).uniqueBy(\.pathLower)
-        return metadatas.map { metadata in
-            let file = existing[metadata.pathLower!] ?? context.insertObject()
+        let existing = try await DropboxFile.matching("pathLower IN (%@)", args: [metadatas.map { $0.pathLower! }], in: context).uniqueBy(\.pathLower)
+        let files = metadatas.compactMap { metadata -> DropboxFile? in
+            guard let path = metadata.pathLower else { return nil }
+            let file = existing[path] ?? context.insertObject()
             file.update(from: metadata)
-            file.syncRun = syncRun
             return file
         }
+        deletedMetadatas.forEach { deleted in
+            if let path = deleted.pathLower, let file = existing[path] {
+                context.perform {
+                    context.delete(file)
+                }
+            }
+        }
+        try await context.perform {
+            try context.save()
+        }
+        return files
     }
 
-    static func forPath(_ pathLower: String, context: NSManagedObjectContext) -> DropboxFile? {
-        return DropboxFile.matching("pathLower ==[c] %@", args: [pathLower], in: context).first
+    static func forPath(_ pathLower: String, context: NSManagedObjectContext) async throws -> DropboxFile? {
+        return try await DropboxFile.matching("pathLower ==[c] %@", args: [pathLower], in: context).first
+    }
+
+    static func deleteAll(in context: NSManagedObjectContext) async throws {
+        for file in try await DropboxFile.matching(nil, in: context) {
+            await context.perform {
+                context.delete(file)
+            }
+        }
+        try await context.perform {
+            try context.save()
+            context.reset()
+        }
     }
 
     internal func update(from metadata: Files.FileMetadata) {

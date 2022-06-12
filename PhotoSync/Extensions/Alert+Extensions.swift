@@ -1,10 +1,4 @@
-//
-//  Alert+Extensions.swift
-//  PhotoSync
-//
-//  Created by Thomas Insam on 4/11/20.
-//  Copyright © 2020 Thomas Insam. All rights reserved.
-//
+//  Copyright 2020 Thomas Insam. All rights reserved.
 
 import UIKit
 

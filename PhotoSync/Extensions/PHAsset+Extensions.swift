@@ -62,7 +62,8 @@ extension PHAsset {
         }
 
         // This includes the file extension.
-        let filename = (PHAssetResource.assetResources(for: self)
+        let filename = self.value(forKey: "filename") // <- this is a cheat, fall back to expensive solution
+        ?? (PHAssetResource.assetResources(for: self)
             .first(where: { [.photo, .video, .fullSizePhoto, .fullSizeVideo].contains($0.type) })?
             .originalFilename)!
         return "/\(datePath)/\(filename)".lowercased()

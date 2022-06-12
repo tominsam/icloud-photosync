@@ -106,6 +106,14 @@ class SyncManager {
                 try await photoFetch
                 try await dropboxFetch
 
+            } catch let error as SwiftyDropbox.CallError<SwiftyDropbox.Files.ListFolderError> {
+                switch error {
+                case .authError:
+                    self.logOut()
+                    // TODO this is not the way to handle auth errors!
+                default:
+                    fatalError(error.description)
+                }
             } catch {
                 fatalError(error.localizedDescription)
             }

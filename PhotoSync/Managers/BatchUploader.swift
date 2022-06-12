@@ -15,25 +15,25 @@ enum UploadError: Error {
 // even though it's much more complicated, because Dropbox has internal transaction / locking that effectively
 // prevent me uploading more than one file at once.
 class BatchUploader: LoggingOperation {
-    struct UploadTask {
+    public struct UploadTask {
         let asset: PHAsset
         let filename: String
         let existingContentHash: String?
     }
 
-    enum UploadResult {
+    private enum UploadResult {
         case success(String, Files.UploadSessionFinishArg)
         case unchanged
         case failure(path: String, message: String)
     }
 
-    enum FinishResult {
+    public enum FinishResult {
         case success(Files.FileMetadata)
         case unchanged
         case failure(path: String, message: String)
     }
 
-    static func batchUpload(persistentContainer: NSPersistentContainer, dropboxClient: DropboxClient, tasks: [UploadTask]) async throws -> [FinishResult] {
+    public static func batchUpload(persistentContainer: NSPersistentContainer, dropboxClient: DropboxClient, tasks: [UploadTask]) async throws -> [FinishResult] {
         // concurrently upload all the files
         let uploadResults = try await withThrowingTaskGroup(of: UploadResult.self) { group -> [UploadResult] in
             for task in tasks {
@@ -57,14 +57,15 @@ class BatchUploader: LoggingOperation {
         }
 
         let finishResults = try await finish(dropboxClient: dropboxClient, entries: uploadResults)
-        try await jobComplete(persistentContainer: persistentContainer, finishResults: finishResults)
+        NSLog("%@", "Complete")
 
         return finishResults
     }
 
     private static func upload(persistentContainer: NSPersistentContainer, dropboxClient: DropboxClient, task: BatchUploader.UploadTask) async throws -> Files.UploadSessionFinishArg? {
-        // Get photo from photoKit
         NSLog("%@", "Downloading \(task.filename)")
+
+        // Get photo from photoKit. This is slow.
         let data = try await task.asset.getImageData()
 
         // This should be async, it's potentially reading hundreds of megs off disk,
@@ -75,12 +76,12 @@ class BatchUploader: LoggingOperation {
 
         // Store the content hash on the database object before we start the upload
         let context = persistentContainer.newBackgroundContext()
-        try await context.perform {
-            if let photo = Photo.forAsset(task.asset, in: context) {
-                // if the photo modified date changed, we should have niled this. If it's set,
-                // but different, that's a profound problem with the sync engine and I need to know
-                assert(photo.contentHash == nil || photo.contentHash == hash)
-                photo.contentHash = hash
+        if let photo = try await Photo.forAsset(task.asset, in: context) {
+            // if the photo modified date changed, we should have niled this. If it's set,
+            // but different, that's a profound problem with the sync engine and I need to know
+            assert(photo.contentHash == nil || photo.contentHash == hash)
+            photo.contentHash = hash
+            try await context.perform {
                 try context.save()
             }
         }
@@ -91,7 +92,12 @@ class BatchUploader: LoggingOperation {
         }
 
         // Upload the file to dropbox. This needs to be "finished", but we do that in batches.
-        NSLog("%@", "Uploading \(task.filename) with \(hash) replacing \(task.existingContentHash ?? "nil")")
+        if let existing = task.existingContentHash {
+            NSLog("%@", "Uploading \(task.filename) with \(hash.prefix(6)) replacing \(existing.prefix(6))")
+        } else {
+            NSLog("%@", "Uploading \(task.filename) with \(hash.prefix(6)) as new file")
+        }
+
         switch data {
         case let .data(data):
             return try await uploadData(dropboxClient: dropboxClient, task: task, data: data)
@@ -100,7 +106,7 @@ class BatchUploader: LoggingOperation {
         }
     }
 
-    static func uploadData(dropboxClient: DropboxClient, task: BatchUploader.UploadTask, data: Data) async throws -> Files.UploadSessionFinishArg {
+    private static func uploadData(dropboxClient: DropboxClient, task: BatchUploader.UploadTask, data: Data) async throws -> Files.UploadSessionFinishArg {
         // Theoretically if data is >150mb we have a problem here, but that seems unlikely
         // for most use cases right now. (hahahaha yes I know)
         let length = data.count
@@ -119,7 +125,7 @@ class BatchUploader: LoggingOperation {
         return Files.UploadSessionFinishArg(cursor: cursor, commit: commitInfo)
     }
 
-    static func uploadUrl(dropboxClient: DropboxClient, task: BatchUploader.UploadTask, url: URL) async throws -> Files.UploadSessionFinishArg {
+    private static func uploadUrl(dropboxClient: DropboxClient, task: BatchUploader.UploadTask, url: URL) async throws -> Files.UploadSessionFinishArg {
         // We need to close the last chunk - we'll track that by fetching
         // the total file size and checking the total uploaded bytes against it.
         let resources = try url.resourceValues(forKeys: [.fileSizeKey])
@@ -204,18 +210,4 @@ class BatchUploader: LoggingOperation {
         return finishResults
     }
 
-    private static func jobComplete(persistentContainer: NSPersistentContainer, finishResults: [FinishResult]) async throws {
-        // Now we've uploaded all the files, we can connect them to the original assets in core data.
-        NSLog("%@", "Complete")
-        // Really need better error handling
-        let context = persistentContainer.newBackgroundContext()
-        try await context.perform {
-            for result in finishResults {
-                if case let .success(metaData) = result {
-                    DropboxFile.insertOrUpdate([metaData], syncRun: "", into: context)
-                }
-            }
-            try context.save()
-        }
-    }
 }

@@ -54,13 +54,15 @@ class PhotoKitManager {
          photos from my local library, where I get about 15k photos per second written into the data store.
          */
 
-        // This blocks very briefly - 0.2 seconds on my physical
-        // device for 70k photos - so I'm not super bothered right now.
         let allPhotosOptions = PHFetchOptions()
         allPhotosOptions.includeHiddenAssets = false
         allPhotosOptions.wantsIncrementalChangeDetails = true
         allPhotosOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+
+        // This blocks very briefly - 0.2 seconds on my physical
+        // device for 70k photos - so I'm not super bothered right now.
         let allPhotos = PHAsset.fetchAssets(with: allPhotosOptions)
+
         let count = allPhotos.count
         NSLog("%@", "Phone has \(count) photo(s)")
 
@@ -68,26 +70,17 @@ class PhotoKitManager {
         state?.total = count
 
         for index in stride(from: 0, to: count, by: fetchSize) {
-//            if index > 0, index % 2000 == 0 {
-//                try context.save()
-//                context.reset()
-//            }
-
-            if index % 1000 == 0 {
-                if index > 0 {
-                    NSLog("%@", "Synced \(index) photos")
-                }
-                state!.progress = index
-                await progressUpdate(state!)
-            }
+            state!.progress = index
+            await progressUpdate(state!)
 
             let top = min(count, index + fetchSize)
             let assets = allPhotos.objects(at: IndexSet(integersIn: index ..< top))
 
             let context = persistentContainer.newBackgroundContext()
-            _ = try await context.perform {
-                Photo.insertOrUpdate(assets, into: context)
+            try await Photo.insertOrUpdate(assets, into: context)
+            try await context.perform {
                 try context.save()
+                context.reset()
             }
         }
 

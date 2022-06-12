@@ -27,95 +27,56 @@ class UploadManager {
             Photo.count(in: context)
         }
 
-        let runIdentifier = UUID().uuidString
         var uploads = [BatchUploader.UploadTask]()
         var deletions = [DeleteOperation.DeleteTask]()
 
-        while true {
-            // fetch the next block of photos that need uploading. Big blocks here because we need to loop
-            // through every photo in the database to get upload candidates for reliability.
-            let photos = await context.perform {
-                Photo.matching("uploadRun != %@ OR uploadRun == nil", args: [runIdentifier], limit: 200, in: context)
-            }
-            if photos.isEmpty {
-                break
-            }
-
-            // Bulk fetch related assets (photokit photos and dropbox files) for this block
-            let rawAssets = PHAsset.fetchAssets(withLocalIdentifiers: photos.map { $0.photoKitId }, options: nil)
-            let assets = (0 ..< rawAssets.count).map { rawAssets.object(at: $0) }.uniqueBy(\.localIdentifier)
-            let dropboxFiles = DropboxFile.matching("pathLower IN %@", args: [photos.map { $0.path.localizedLowercase }], in: context).uniqueBy(\.pathLower)
-
-            for photo in photos {
-                let asset = assets[photo.photoKitId]
-                let dropboxFile = dropboxFiles[photo.path.localizedLowercase]
-
-                switch (asset, dropboxFile) {
-                case (.none, .none):
-                    // No photokit object, no dropbox object. The local photo object should not exist
-                    await context.perform {
-                        context.delete(photo)
-                    }
-                    state!.progress += 1
-
-                case let (.some(asset), .none):
-                    // Object exists in PhotoKit but not in dropbox. Upload it
-                    uploads.append(.init(asset: asset, filename: photo.path, existingContentHash: nil))
-
-                case let (.none, .some(file)):
-                    // Object exists in dropbox but not PhotoKit. Delete from Dropbox
-                    deletions.append(.init(photoKitId: photo.photoKitId, file: file))
-
-                case let (.some(asset), .some(file)):
-                    // Object exists in both. Does it need syncing
-                    if photo.contentHash != file.contentHash {
-                        uploads.append(.init(asset: asset, filename: photo.path, existingContentHash: file.contentHash))
-                    } else {
-                        state!.progress += 1
-                    }
+        try await iterateAllPhotos(inContext: context) { photo, asset, dropboxFile in
+            switch (asset, dropboxFile) {
+            case (.none, .none):
+                // No photokit object, no dropbox object. The local photo object should not exist
+                await context.perform {
+                    context.delete(photo)
                 }
-            }
 
-            // this excludes the photos from the next loop - it's much safer than
-            // paginating them, as long as there's only one instance of UploadManager
-            // running at once.
-            // The uploader also manipulates the photo object, so avoid conflicts by resetting the context.
-            try await context.perform {
-                for photo in photos {
-                    photo.uploadRun = runIdentifier
+            case let (.some(asset), .none):
+                // Object exists in PhotoKit but not in dropbox. Upload it
+                uploads.append(.init(asset: asset, filename: photo.path, existingContentHash: nil))
+
+            case let (.none, .some(file)):
+                // Object exists in dropbox but not PhotoKit. Delete from Dropbox
+                deletions.append(.init(photoKitId: photo.photoKitId, file: file))
+
+            case let (.some(asset), .some(file)):
+                // Object exists in both. Does it need syncing
+                if photo.contentHash != file.contentHash {
+                    uploads.append(.init(asset: asset, filename: photo.path, existingContentHash: file.contentHash))
                 }
-                try context.save()
-                context.reset()
-            }
-
-            NSLog("%@", "Accumulated \(uploads.count) uploads and \(deletions.count) deletions")
-            await progressUpdate(state!)
-
-            // When we accumulate 10 uploads, send them in a batch
-            while uploads.count >= 10 {
-                let chunk = Array(uploads[0 ..< 10])
-                uploads = Array(uploads[10...])
-                try await upload(chunk)
-
-                state!.progress += chunk.count
-                await progressUpdate(state!)
-            }
-
-            if !deletions.isEmpty {
-                // TODO: fix deletions
-                //                for deletion in deletions {
-                //                    try await DeleteOperation.deleteFile(persistentContainer: persistentContainer, dropboxClient: dropboxClient, task: deletion)
-                //                }
-                state!.progress += deletions.count
-                await progressUpdate(state!)
-                deletions = []
             }
         }
 
-        try await upload(uploads)
-        // for deletion in deletions {
-        //            try await DeleteOperation.deleteFile(persistentContainer: persistentContainer, dropboxClient: dropboxClient, task: deletion)
-        // }
+        NSLog("%@", "Accumulated \(uploads.count) uploads and \(deletions.count) deletions")
+        state!.total = uploads.count + deletions.count
+        state!.progress = 0
+        await progressUpdate(state!)
+
+        // This fetches the photo and does the upload.
+        // TODO - we're going half as fast as we could because we're waiting to download
+        // the images, then waiting to upload the images - we should be pre-fetching the
+        // photos in advance of the upload
+        for chunk in uploads.chunked(into: 10) {
+            try await upload(chunk)
+            state!.progress += chunk.count
+            await progressUpdate(state!)
+        }
+
+        for chunk in deletions.chunked(into: 10) {
+            // TODO: fix deletions
+            //                for deletion in deletions {
+            //                    try await DeleteOperation.deleteFile(persistentContainer: persistentContainer, dropboxClient: dropboxClient, task: deletion)
+            //                }
+            state!.progress += chunk.count
+            await progressUpdate(state!)
+        }
 
         NSLog("%@", "Upload complete")
 
@@ -131,5 +92,21 @@ class UploadManager {
             }
         }
         await progressUpdate(state!)
+    }
+
+    func iterateAllPhotos(inContext context: NSManagedObjectContext, withBlock block: (Photo, PHAsset?, DropboxFile?) async -> Void) async throws {
+        let allPhotos = try await Photo.matching("1=1", in: context)
+        for photos in allPhotos.chunked(into: 500) {
+            // Bulk fetch related assets (photokit photos and dropbox files) for this block
+            let rawAssets = PHAsset.fetchAssets(withLocalIdentifiers: photos.map { $0.photoKitId }, options: nil)
+            let assets = (0 ..< rawAssets.count).map { rawAssets.object(at: $0) }.uniqueBy(\.localIdentifier)
+            let dropboxFiles = try await DropboxFile.matching("pathLower IN %@", args: [photos.map { $0.path.localizedLowercase }], in: context).uniqueBy(\.pathLower)
+
+            for photo in photos {
+                let asset = assets[photo.photoKitId]
+                let dropboxFile = dropboxFiles[photo.path.localizedLowercase]
+                await block(photo, asset, dropboxFile)
+            }
+        }
     }
 }
