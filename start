@@ -1,8 +1,5 @@
 #!/bin/bash -ex
-killall Xcode || true
-
+osascript -e 'quit application "Xcode"'
 sleep 2
-
 xcodegen
-
 open PhotoSync.xcodeproj

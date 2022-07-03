@@ -66,19 +66,6 @@ targets:
           - CFBundleURLName: ""
             CFBundleURLSchemes:
               - db-ru820t3myp7s6vk
-#        UIApplicationSceneManifest:
-#          UIApplicationSupportsMultipleScenes: false
-#          UISceneConfigurations:
-#            UIWindowSceneSessionRoleApplication:
-#              - UISceneConfigurationName: Main
-#                UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).SceneDelegate
-    # entitlements:
-    #   path: PhotoSync.entitlements
-    #   properties:
-    #     com.apple.developer.networking.multicast: true
-    #     com.apple.security.files.user-selected.read-write: true
-    #     com.apple.security.network.client: true
-    #     com.apple.security.app-sandbox: true
     postCompileScripts:
       - script: /opt/homebrew/bin/swiftlint
         name: Run SwiftLint

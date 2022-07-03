@@ -49,11 +49,13 @@ class DropboxManager {
             do {
                 listResult = try await dropboxClient.files.listFolder(path: "", recursive: true, includeDeleted: true).asyncResponse()
             } catch {
+                NSLog("Error calling dropbox listFolder: %@", error.localizedDescription)
                 state?.errors.append(ServiceError(path: "/", message: error.localizedDescription))
                 return
             }
             cursor = try await gotPage(listResult, context: context)
         }
+        NSLog("Cursor is %@", String(describing: cursor))
 
         // While there are more results, fetch and insert the next page
         while cursor != nil {
@@ -61,11 +63,13 @@ class DropboxManager {
             do {
                 listResult = try await dropboxClient.files.listFolderContinue(cursor: cursor!).asyncResponse()
             } catch {
+                NSLog("Error calling dropbox listFolderContinue: %@", error.localizedDescription)
                 state?.errors.append(ServiceError(path: "/", message: error.localizedDescription))
                 return
             }
             cursor = try await gotPage(listResult, context: context)
             if !listResult.hasMore {
+                NSLog("All files fetched from dropbox")
                 break
             }
         }

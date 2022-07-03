@@ -39,6 +39,9 @@ class PhotoKitManager {
 
         let start = DispatchTime.now()
 
+        let context = persistentContainer.newBackgroundContext()
+        let firstSync = Photo.count(in: context) == 0
+
         /*
          The PhotoKit API is very very fast - updating the Photo objects in core data is the bottleneck here.
          So I've written the Photo.update call to take lists of assets, because the predicate "where ID IN (?)"
@@ -66,7 +69,10 @@ class PhotoKitManager {
         let count = allPhotos.count
         NSLog("%@", "Phone has \(count) photo(s)")
 
-        let fetchSize = 400
+        // First sync is slow because we have no photo paths, and those are expensive,
+        // so it's better to update more frequently, later syncs are bound by DB insert
+        // rate, and larger blocks are more efficient.
+        let fetchSize = firstSync ? 50 : 400
         state?.total = count
 
         for index in stride(from: 0, to: count, by: fetchSize) {
@@ -76,7 +82,6 @@ class PhotoKitManager {
             let top = min(count, index + fetchSize)
             let assets = allPhotos.objects(at: IndexSet(integersIn: index ..< top))
 
-            let context = persistentContainer.newBackgroundContext()
             try await Photo.insertOrUpdate(assets, into: context)
             try await context.perform {
                 try context.save()
