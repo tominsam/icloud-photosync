@@ -36,7 +36,7 @@ public extension DropboxFile {
         }
         try await context.performSave()
 
-        let newExisting = try await DropboxFile.matching("pathLower IN (%@)", args: [metadatas.map { $0.pathLower! }], in: context).uniqueBy(\.pathLower)
+        let newExisting = try await DropboxFile.matching("pathLower IN (%@)", args: [deletedMetadatas.map { $0.pathLower! }], in: context).uniqueBy(\.pathLower)
         deletedMetadatas.forEach { deleted in
             if let path = deleted.pathLower, let file = newExisting[path] {
                 context.performAndWait {

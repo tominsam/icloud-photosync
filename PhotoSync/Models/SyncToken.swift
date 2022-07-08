@@ -17,7 +17,7 @@ public class SyncToken: NSManagedObject, ManagedObject {
             case .dropboxAuth:
                 return 1
             case .dropboxListFolder:
-                return 3
+                return 1
             case .photoKit:
                 return 1
             }

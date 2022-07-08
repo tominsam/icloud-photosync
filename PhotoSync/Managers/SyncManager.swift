@@ -78,6 +78,13 @@ class SyncManager {
             self.delegate?.syncManagerUpdatedState(self)
         }
 
+        if let tempFiles = try? FileManager.default.contentsOfDirectory(atPath: NSTemporaryDirectory()) {
+            for file in tempFiles {
+                print(file)
+                try? FileManager.default.removeItem(atPath: file)
+            }
+        }
+
         Task {
             do {
                 NSLog("%@", "Starting photo sync")
@@ -108,6 +115,9 @@ class SyncManager {
                 NSLog("%@", "Upload failed - \(error) \(String(describing: error)) \(error.localizedDescription)")
                 fatalError(error.localizedDescription)
             }
+
+            // resync dropbox at the end
+            try? await dropboxManager.sync()
         }
     }
 }

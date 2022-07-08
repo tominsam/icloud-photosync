@@ -18,7 +18,7 @@ class UploadManager: Manager {
         let (changes, deletions) = try await iterateAllPhotos(inContext: context)
 
         let uploads = changes.filter { $0.isNewFile }
-        let replacements = uploads.filter { !$0.isNewFile }
+        let replacements = changes.filter { !$0.isNewFile }
 
         NSLog("%@", "Accumulated \(uploads.count) uploads, \(replacements.count) replacements, and \(deletions.count) deletions")
         await setTotal(uploads.count + replacements.count + deletions.count)

@@ -11,11 +11,12 @@ import Photos
 enum AssetData {
     case data(Data, hash: String)
     case url(URL, hash: String)
+    case tempUrl(URL, hash: String)
     case failure(Error)
 
     var hash: String? {
         switch self {
-        case .data(_, let hash), .url(_, let hash):
+        case .data(_, let hash), .url(_, let hash), .tempUrl(_, let hash):
             return hash
         case .failure:
             return nil
@@ -110,13 +111,38 @@ extension PHAsset {
             options.isNetworkAccessAllowed = true // download if required
             return try await withCheckedThrowingContinuation { continuation in
                 manager.requestAVAsset(forVideo: self, options: options) { avAsset, _, info in
-                    guard let avUrlAsset = avAsset as? AVURLAsset else {
+                    if let composition = avAsset as? AVComposition {
+                        NSLog("%@", "Exporting compositional video")
+                        // Slo-mo video - https://buffer.com/resources/slow-motion-video-ios/
+                        guard let export = AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetHighestQuality) else {
+                            continuation.resume(throwing: AssetError.fetch("Can't start export session", nil))
+                            return
+                        }
+                        let filename = UUID().uuidString + ".mov"
+                        let tempDir = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+                        let tempFile = tempDir.appendingPathComponent(filename, isDirectory: false)
+                        export.outputURL = tempFile
+                        export.outputFileType = .mov
+                        export.shouldOptimizeForNetworkUse = true
+                        export.exportAsynchronously {
+                            NSLog("%@", "Export complete: \(export.status) to \(tempFile)")
+                            if export.status == .completed {
+                                continuation.resume(returning: .tempUrl(tempFile, hash: tempFile.dropboxContentHash()))
+                            } else {
+                                continuation.resume(throwing: AssetError.fetch("Can't export video", nil))
+                            }
+                        }
+                        // TODO do I need to delete these urls?
+
+                    } else if let avUrlAsset = avAsset as? AVURLAsset {
+                        NSLog("%@", "Video downloaded as \(avUrlAsset.url)")
+                        continuation.resume(returning: .url(avUrlAsset.url, hash: avUrlAsset.url.dropboxContentHash()))
+                        // TODO do I need to delete these urls?
+                    } else {
                         let error = info?[PHImageErrorKey] as? Error
-                        NSLog("Video fetch failed: %@", info ?? [:])
+                        NSLog("Video fetch for %@ failed: %@", String(describing: avAsset), info ?? [:])
                         continuation.resume(throwing: AssetError.fetch("Can't fetch video", error))
-                        return
                     }
-                    continuation.resume(returning: .url(avUrlAsset.url, hash: avUrlAsset.url.dropboxContentHash()))
                 }
             }
 

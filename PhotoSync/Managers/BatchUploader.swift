@@ -41,13 +41,18 @@ class BatchUploader: LoggingOperation {
         // Download all the images, one at a time, in advance.
         let data = await tasks.asyncMap { await download(persistentContainer: persistentContainer, asset: $0.asset) }
 
+
         NSLog("%@", "Uploading chunk of \(data.filter { $0.hash != nil }.count) files")
 
         // concurrently upload all the files
         let uploadResults = await withTaskGroup(of: UploadResult.self) { group -> [UploadResult] in
             for (task, data) in zip(tasks, data) {
+                if data.hash != nil && task.existingContentHash == data.hash {
+                    NSLog("%@", "Skipping unchanged file")
+                    continue
+                }
                 group.addTask {
-                    let uploadSession: Files.UploadSessionFinishArg?
+                    let uploadSession: Files.UploadSessionFinishArg
                     do {
                         switch data {
                         case let .data(data, hash):
@@ -57,7 +62,7 @@ class BatchUploader: LoggingOperation {
                                 date: task.asset.creationDate ?? task.asset.modificationDate,
                                 contentHash: hash,
                                 data: data)
-                        case let .url(url, hash):
+                        case .url(let url, let hash), .tempUrl(let url, let hash):
                             uploadSession = try await uploadUrl(
                                 dropboxClient: dropboxClient,
                                 filename: task.filename,
@@ -67,16 +72,16 @@ class BatchUploader: LoggingOperation {
                         case .failure(let error):
                             throw error
                         }
+                        if case .tempUrl(let url, _) = data {
+                            // We exported a video to a temp file, let's clean that up
+                            try? FileManager.default.removeItem(at: url)
+                        }
                     } catch let error as SwiftyDropbox.CallError<SwiftyDropbox.Files.UploadSessionStartError> {
                         return .failure(path: task.filename, message: error.description, error: error)
                     } catch {
                         return .failure(path: task.filename, message: error.localizedDescription, error: error)
                     }
-                    if let uploadSession {
-                        return .success(task.filename, uploadSession)
-                    } else {
-                        return .unchanged
-                    }
+                    return .success(task.filename, uploadSession)
                 }
             }
             var output = [UploadResult]()
@@ -100,9 +105,6 @@ class BatchUploader: LoggingOperation {
             // Store the content hash on the database object before we start the upload
             let context = persistentContainer.newBackgroundContext()
             if let photo = try await Photo.forAsset(asset, in: context) {
-                // if the photo modified date changed, we should have niled this. If it's set,
-                // but different, that's a profound problem with the sync engine and I need to know
-                assert(photo.contentHash == nil || photo.contentHash == data.hash)
                 photo.contentHash = data.hash
                 try await context.performSave()
             }

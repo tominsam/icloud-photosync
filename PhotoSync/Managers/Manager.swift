@@ -17,6 +17,7 @@ class Manager {
     func setTotal(_ total: Int) async {
         var state = self._state ?? ServiceState(progress: 0, total: 0)
         state.total = total
+        state.complete = false
         self._state = state
         let updateState = state
         progressUpdate(updateState)
@@ -26,6 +27,7 @@ class Manager {
     func setProgress(_ progress: Int) async {
         var state = self._state ?? ServiceState(progress: 0, total: 0)
         state.progress = progress
+        state.complete = false
         self._state = state
         let updateState = state
         progressUpdate(updateState)
@@ -35,6 +37,7 @@ class Manager {
     func addProgress(_ progress: Int) async {
         var state = self._state ?? ServiceState(progress: 0, total: 0)
         state.progress += progress
+        state.complete = false
         self._state = state
         let updateState = state
         progressUpdate(updateState)
