@@ -17,7 +17,12 @@
         <attribute name="modified" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="path" optional="YES" attributeType="String"/>
         <attribute name="photoKitId" attributeType="String"/>
+        <attribute name="preferredPath" optional="YES" attributeType="String"/>
         <fetchIndex name="byPhotokitId">
+            <fetchIndexElement property="photoKitId" type="Binary" order="ascending"/>
+        </fetchIndex>
+        <fetchIndex name="byPathAndPhotoKitId">
+            <fetchIndexElement property="path" type="Binary" order="ascending"/>
             <fetchIndexElement property="photoKitId" type="Binary" order="ascending"/>
         </fetchIndex>
         <uniquenessConstraints>

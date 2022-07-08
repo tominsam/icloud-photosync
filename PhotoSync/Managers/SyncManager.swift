@@ -62,27 +62,28 @@ class SyncManager {
         }
         syncing = true
 
-        let photoManager = PhotoKitManager(persistentContainer: persistentContainer) { progress in
-            assert(Thread.isMainThread)
+        // Clear out anything we left in temp from the last run
+        if let tempFiles = try? FileManager.default.contentsOfDirectory(atPath: NSTemporaryDirectory()) {
+            for file in tempFiles {
+                do {
+                    try FileManager.default.removeItem(atPath: NSTemporaryDirectory() + "/" + file)
+                } catch {
+                    NSLog("%@", "Failed to delete temp file! \(error)")
+                }
+            }
+        }
+
+        let photoManager = PhotoKitManager(persistentContainer: persistentContainer, dropboxClient: client) { progress in
             self.photoState = progress
             self.delegate?.syncManagerUpdatedState(self)
         }
         let dropboxManager = DropboxManager(persistentContainer: persistentContainer, dropboxClient: client) { progress in
-            assert(Thread.isMainThread)
             self.dropboxState = progress
             self.delegate?.syncManagerUpdatedState(self)
         }
         let uploadManager = UploadManager(persistentContainer: persistentContainer, dropboxClient: client) { progress in
-            assert(Thread.isMainThread)
             self.uploadState = progress
             self.delegate?.syncManagerUpdatedState(self)
-        }
-
-        if let tempFiles = try? FileManager.default.contentsOfDirectory(atPath: NSTemporaryDirectory()) {
-            for file in tempFiles {
-                print(file)
-                try? FileManager.default.removeItem(atPath: file)
-            }
         }
 
         Task {

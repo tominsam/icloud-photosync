@@ -96,7 +96,7 @@ extension PHAsset {
                 manager.requestImageDataAndOrientation(for: self, options: options) { data, _, _, info in
                     guard let data = data else {
                         let error = info?[PHImageErrorKey] as? Error
-                        NSLog("Photo fetch failed: %@", info ?? [:])
+                        NSLog("Photo fetch failed: %@", error.map { String(describing: $0) } ?? "")
                         continuation.resume(throwing: AssetError.fetch("Can't fetch photo", error))
                         return
                     }
@@ -114,6 +114,7 @@ extension PHAsset {
                     if let composition = avAsset as? AVComposition {
                         NSLog("%@", "Exporting compositional video")
                         // Slo-mo video - https://buffer.com/resources/slow-motion-video-ios/
+                        // TODO this generates inconsistent content hashes per-platform.
                         guard let export = AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetHighestQuality) else {
                             continuation.resume(throwing: AssetError.fetch("Can't start export session", nil))
                             return
@@ -140,7 +141,7 @@ extension PHAsset {
                         // TODO do I need to delete these urls?
                     } else {
                         let error = info?[PHImageErrorKey] as? Error
-                        NSLog("Video fetch for %@ failed: %@", String(describing: avAsset), info ?? [:])
+                        NSLog("Photo fetch failed: %@", error.map { String(describing: $0) } ?? "")
                         continuation.resume(throwing: AssetError.fetch("Can't fetch video", error))
                     }
                 }
@@ -157,7 +158,9 @@ extension PHAsset {
                 let allPhotosOptions = PHFetchOptions()
                 allPhotosOptions.includeHiddenAssets = false
                 allPhotosOptions.wantsIncrementalChangeDetails = false
-                allPhotosOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+                allPhotosOptions.sortDescriptors = [
+                    NSSortDescriptor(key: "creationDate", ascending: false),
+                ]
 
                 // This blocks very briefly - 0.2 seconds on my physical
                 // device for 70k photos - so I'm not super bothered right now.
@@ -167,6 +170,15 @@ extension PHAsset {
                 assets.enumerateObjects { asset, _, _ in
                     allAssets.append(asset)
                 }
+
+                // Can't sort by identifier in the predicate
+                allAssets.sort { (lhs, rhs) in
+                    if let ld = lhs.creationDate, let rd = rhs.creationDate, ld != rd {
+                        return ld < rd
+                    }
+                    return lhs.localIdentifier < rhs.localIdentifier
+                }
+
                 continuation.resume(returning: allAssets)
                 NSLog("%@", "PhotoKit call took \((-start.timeIntervalSinceNow).formatted()) seconds to read \(allAssets.count) photos")
             }

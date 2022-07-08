@@ -41,14 +41,14 @@ class BatchUploader: LoggingOperation {
         // Download all the images, one at a time, in advance.
         let data = await tasks.asyncMap { await download(persistentContainer: persistentContainer, asset: $0.asset) }
 
-
         NSLog("%@", "Uploading chunk of \(data.filter { $0.hash != nil }.count) files")
 
         // concurrently upload all the files
         let uploadResults = await withTaskGroup(of: UploadResult.self) { group -> [UploadResult] in
             for (task, data) in zip(tasks, data) {
                 if data.hash != nil && task.existingContentHash == data.hash {
-                    NSLog("%@", "Skipping unchanged file")
+                    // This means that we've uploaded it before, in another install or whatever -
+                    // the db hash equals the newly-calculated file hash, and we can skip it.
                     continue
                 }
                 group.addTask {
@@ -90,10 +90,29 @@ class BatchUploader: LoggingOperation {
             }
             return output
         }
+
+        guard !uploadResults.isEmpty else {
+            NSLog("%@", "Skipped all files")
+            return []
+        }
+
+        if uploadResults.count < tasks.count {
+            NSLog("%@", "Skipped \(tasks.count - uploadResults.count) file(s)")
+        }
+
         do {
             return try await finish(dropboxClient: dropboxClient, entries: uploadResults)
         } catch {
-            return [.failure(path: "", message: error.localizedDescription, error: error)]
+            return uploadResults.map { result -> FinishResult in
+                switch result {
+                case .success(let filename, _):
+                    return .failure(path: filename, message: error.localizedDescription, error: error)
+                case .unchanged:
+                    return .unchanged
+                case .failure(path: let path, message: let message, error: let error):
+                    return .failure(path: path, message: message, error: error)
+                }
+            }
         }
     }
 

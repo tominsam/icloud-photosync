@@ -22,6 +22,10 @@ public class Photo: NSManagedObject, ManagedObject {
     // The path we want the image to have on disk. Derived from photokit data
     // Doesn't need the original version to be downloaded to achieve this, but
     // is a little expensive
+    @NSManaged public var preferredPath: String!
+
+    // The path we expect the file to have on disk - this is de-duplicated based
+    // on if there's an existing file at the current path
     @NSManaged public var path: String!
 
     // The dropbox contenthash of the image. nil becaue we need the
@@ -46,6 +50,13 @@ public extension Photo {
         return try await Photo.matching("photoKitId = %@", args: [asset.localIdentifier], in: context).first
     }
 
+    static func clearCalculatedPaths(in context: NSManagedObjectContext) throws {
+        let request = NSBatchUpdateRequest(entity: entity())
+        request.predicate = NSPredicate(format: "1=1")
+        request.propertiesToUpdate = ["path": NSNull()]
+        try context.execute(request)
+    }
+
     private func update(from asset: PHAsset) {
         photoKitId = asset.localIdentifier
         created = asset.creationDate
@@ -64,20 +75,22 @@ public extension Photo {
         // We're storing a path for the image in core data rather than deriving it every time, because
         // (a) it's slow to derive (because fetching the file type is expensive) and (b) we want it to be
         // consistent for every run of the app.
-        if path == nil {
-            var path = asset.dropboxPath(fromFilename: filename)
-
-            // Are there any existing photos with this exact path? Can happen, Photos
-            // makes no attempt to keep filenames unique. Keep appending a number to the
-            // filename until we get something unique. Remember that files systems are
-            // often not case sensitive!
-            while Photo.count("path ==[c] %@ && photoKitId != %@", args: [path, photoKitId!], in: managedObjectContext!) > 0 {
-                let newPath = path.incrementFilenameMagicNumber()
-                NSLog("%@", "Generating new version of \(path) -> \(newPath)")
-                path = newPath
-            }
-            self.path = path
+        if preferredPath == nil {
+            preferredPath = asset.dropboxPath(fromFilename: filename)
         }
+
+        // Are there any existing photos with this exact path? Can happen, Photos
+        // makes no attempt to keep filenames unique. Keep appending a number to the
+        // filename until we get something unique. Remember that files systems are
+        // often not case sensitive!
+        // TODO extract this from the inner loop because it's the slowest part of startup now
+        path = preferredPath
+        while Photo.count("path == %@ && photoKitId != %@", args: [path!, photoKitId!], in: managedObjectContext!) > 0 {
+            let newPath = path.incrementFilenameMagicNumber()
+            NSLog("%@", "Generating new version of \(path!) -> \(newPath)")
+            path = newPath
+        }
+        self.path = path
     }
 }
 
@@ -107,9 +120,5 @@ extension String {
 
         // Glue the path back together
         return ((prefix as NSString).appendingPathComponent(filename + suffix) as NSString).appendingPathExtension(pathExtension)!
-
-        // TODO this is generally a duplicate file. If the user merges the duplicates together, it would be really nice if
-        // we could also remove the (1) even if the remaining file is the (1) version
-
     }
 }

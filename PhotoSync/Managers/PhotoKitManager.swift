@@ -10,11 +10,7 @@ import CoreData
 import Photos
 import UIKit
 
-class PhotoKitManager {
-    private let persistentContainer: NSPersistentContainer
-    let progressUpdate: @MainActor(ServiceState) -> Void
-
-    private var state: ServiceState?
+class PhotoKitManager: Manager {
 
     static var hasPermission: Bool {
         switch PHPhotoLibrary.authorizationStatus() {
@@ -25,22 +21,25 @@ class PhotoKitManager {
         }
     }
 
-    init(persistentContainer: NSPersistentContainer, progressUpdate: @escaping (ServiceState) -> Void) {
-        self.persistentContainer = persistentContainer
-        self.progressUpdate = progressUpdate
-    }
-
     func sync() async throws {
-        if state != nil {
-            NSLog("%@", "Already syncing photos")
-            return
-        }
-        state = ServiceState()
-
         let start = DispatchTime.now()
 
         let context = persistentContainer.newBackgroundContext()
-        let firstSync = Photo.count(in: context) == 0
+        let count = Photo.count(in: context)
+        await setTotal(count)
+        let firstSync = count == 0
+
+        // If the user deletes one of of a pair of files with the same name,
+        // I want to restore the original name to whichever is left - that means
+        // that the path generation code needs to be safe, and return the same
+        // result when called repeatedly on the same data set, but also generate
+        // new data when called on a new dataset. (And be consistent cross-platform)
+        // That's done by having every Photo have a cached "this is the path that
+        // I want" that is expensive to calculate, then on parse we loop through
+        // the photos in a _consistent order_ and generate the actual output paths.
+        // This should be deterministic when you leave both files in place.
+        NSLog("%@", "Resetting paths")
+        try Photo.clearCalculatedPaths(in: context)
 
         /*
          The PhotoKit API is very very fast - updating the Photo objects in core data is the bottleneck here.
@@ -63,22 +62,17 @@ class PhotoKitManager {
         // First sync is slow because we have no photo paths, and those are expensive,
         // so it's better to update more frequently, later syncs are bound by DB insert
         // rate, and larger blocks are more efficient.
-        let fetchSize = firstSync ? 50 : 400
-        state?.total = allPhotos.count
+        let fetchSize = firstSync ? 200 : 1000
+        await setTotal(allPhotos.count)
 
         for chunk in allPhotos.chunked(into: fetchSize) {
-            state!.progress += fetchSize
-            await progressUpdate(state!)
+            await addProgress(fetchSize)
             try await Photo.insertOrUpdate(chunk, into: context)
             try await context.performSave(andReset: true)
         }
 
         let duration = Double(DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds) / 1_000_000_000
         NSLog("Synced %d photos in %0.1f seconds (%.0f per second)", allPhotos.count, duration, Double(allPhotos.count) / duration)
-
-        state?.complete = true
-        let total = state?.total ?? 0
-        state?.progress = total
-        await progressUpdate(state!)
+        await markComplete()
     }
 }

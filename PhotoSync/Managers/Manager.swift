@@ -54,7 +54,7 @@ class Manager {
 
     @MainActor
     func recordError(_ error: ServiceError) async {
-        NSLog("Recording error: %@ : %@ (%@) %@", error.path, error.message, error.error?.localizedDescription ?? "", String(describing: error.error))
+        NSLog("Recording error: %@ : %@", error.path, error.message)
         var state = _state ?? ServiceState(progress: 0, total: 0)
         state.errors.append(error)
         self._state = state

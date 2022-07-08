@@ -26,25 +26,31 @@ public class DropboxFile: NSManagedObject, ManagedObject {
 public extension DropboxFile {
     @discardableResult
     static func insertOrUpdate(_ metadatas: [Files.FileMetadata], delete deletedMetadatas: [Files.DeletedMetadata], into context: NSManagedObjectContext) async throws -> [DropboxFile] {
-        guard !metadatas.isEmpty else { return [] }
-        let existing = try await DropboxFile.matching("pathLower IN (%@)", args: [metadatas.map { $0.pathLower! }], in: context).uniqueBy(\.pathLower)
-        let files = metadatas.compactMap { metadata -> DropboxFile? in
-            guard let path = metadata.pathLower else { return nil }
-            let file = existing[path] ?? context.performAndWait { context.insertObject() }
-            file.update(from: metadata)
-            return file
+        let files: [DropboxFile]
+        if !metadatas.isEmpty {
+            let existing = try await DropboxFile.matching("pathLower IN (%@)", args: [metadatas.map { $0.pathLower! }], in: context).uniqueBy(\.pathLower)
+            files = metadatas.compactMap { metadata -> DropboxFile? in
+                guard let path = metadata.pathLower else { return nil }
+                let file = existing[path] ?? context.performAndWait { context.insertObject() }
+                file.update(from: metadata)
+                return file
+            }
+            try await context.performSave()
+        } else {
+            files = []
         }
-        try await context.performSave()
 
-        let newExisting = try await DropboxFile.matching("pathLower IN (%@)", args: [deletedMetadatas.map { $0.pathLower! }], in: context).uniqueBy(\.pathLower)
-        deletedMetadatas.forEach { deleted in
-            if let path = deleted.pathLower, let file = newExisting[path] {
-                context.performAndWait {
-                    context.delete(file)
+        if !deletedMetadatas.isEmpty {
+            let newExisting = try await DropboxFile.matching("pathLower IN (%@)", args: [deletedMetadatas.map { $0.pathLower! }], in: context).uniqueBy(\.pathLower)
+            deletedMetadatas.forEach { deleted in
+                if let path = deleted.pathLower, let file = newExisting[path] {
+                    context.performAndWait {
+                        context.delete(file)
+                    }
                 }
             }
+            try await context.performSave()
         }
-        try await context.performSave()
 
         return files
     }
