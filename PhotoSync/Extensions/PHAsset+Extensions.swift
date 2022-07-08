@@ -9,29 +9,39 @@
 import Photos
 
 enum AssetData {
-    case data(Data)
-    case url(URL)
+    case data(Data, hash: String)
+    case url(URL, hash: String)
+    case failure(Error)
 
-    func dropboxContentHash() -> String? {
+    var hash: String? {
         switch self {
-        case let .data(data):
-            return data.dropboxContentHash()
-        case let .url(url):
-            return url.dropboxContentHash()
+        case .data(_, let hash), .url(_, let hash):
+            return hash
+        case .failure:
+            return nil
         }
     }
 }
 
 enum AssetError: Error, LocalizedError {
-    case fetch(String)
+    case fetch(String, Error?)
     case mediaType(PHAssetMediaType)
 
     var errorDescription: String? {
         switch self {
-        case let .fetch(message):
+        case .fetch(let message, _):
             return message
-        case let .mediaType(mediaType):
+        case .mediaType(let mediaType):
             return "Invalid media type \(mediaType)"
+        }
+    }
+
+    var sourceError: Error? {
+        switch self {
+        case .fetch(_, let error):
+            return error
+        case .mediaType:
+            return nil
         }
     }
 }
@@ -43,9 +53,8 @@ extension PHAsset {
         return dateFormatter
     }()
 
-    /// The path in dropbox where we want this asset to be. This method is slow (multiple
-    /// milliseconds) so exercise caution - don't call it on first sync.
-    var dropboxPath: String {
+    // slightly slow
+    func dropboxPath(fromFilename filename: String) -> String {
         let datePath: String
         if let creationDate = creationDate {
             // Can we get a timezone from the photo location? Assume the photo was taken in that TZ
@@ -61,12 +70,16 @@ extension PHAsset {
             datePath = "No date"
         }
 
-        // This includes the file extension.
-        let filename = self.value(forKey: "filename") // <- this is a cheat, fall back to expensive solution
-        ?? (PHAssetResource.assetResources(for: self)
-            .first(where: { [.photo, .video, .fullSizePhoto, .fullSizeVideo].contains($0.type) })?
-            .originalFilename)!
         return "/\(datePath)/\(filename)".lowercased()
+    }
+
+    // This is slow! (~100ms)
+    var filename: String? {
+        return PHAssetResource.assetResources(for: self)
+            .first {
+                [.photo, .video, .fullSizePhoto, .fullSizeVideo].contains($0.type)
+            }?
+            .originalFilename
     }
 
     func getImageData() async throws -> AssetData {
@@ -81,10 +94,12 @@ extension PHAsset {
             return try await withCheckedThrowingContinuation { continuation in
                 manager.requestImageDataAndOrientation(for: self, options: options) { data, _, _, info in
                     guard let data = data else {
-                        continuation.resume(throwing: AssetError.fetch("Can't fetch photo: \(info ?? [:])"))
+                        let error = info?[PHImageErrorKey] as? Error
+                        NSLog("Photo fetch failed: %@", info ?? [:])
+                        continuation.resume(throwing: AssetError.fetch("Can't fetch photo", error))
                         return
                     }
-                    continuation.resume(returning: .data(data))
+                    continuation.resume(returning: .data(data, hash: data.dropboxContentHash()))
                 }
             }
 
@@ -96,15 +111,39 @@ extension PHAsset {
             return try await withCheckedThrowingContinuation { continuation in
                 manager.requestAVAsset(forVideo: self, options: options) { avAsset, _, info in
                     guard let avUrlAsset = avAsset as? AVURLAsset else {
-                        continuation.resume(throwing: AssetError.fetch("Can't fetch video: \(info ?? [:])"))
+                        let error = info?[PHImageErrorKey] as? Error
+                        NSLog("Video fetch failed: %@", info ?? [:])
+                        continuation.resume(throwing: AssetError.fetch("Can't fetch video", error))
                         return
                     }
-                    continuation.resume(returning: .url(avUrlAsset.url))
+                    continuation.resume(returning: .url(avUrlAsset.url, hash: avUrlAsset.url.dropboxContentHash()))
                 }
             }
 
         default:
             throw AssetError.mediaType(mediaType)
+        }
+    }
+
+    static var allAssets: [PHAsset] {
+        get async {
+            return await withCheckedContinuation { continuation in
+                let allPhotosOptions = PHFetchOptions()
+                allPhotosOptions.includeHiddenAssets = false
+                allPhotosOptions.wantsIncrementalChangeDetails = false
+                allPhotosOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+
+                // This blocks very briefly - 0.2 seconds on my physical
+                // device for 70k photos - so I'm not super bothered right now.
+                let start = Date()
+                let assets = PHAsset.fetchAssets(with: allPhotosOptions)
+                var allAssets = [PHAsset]()
+                assets.enumerateObjects { asset, _, _ in
+                    allAssets.append(asset)
+                }
+                continuation.resume(returning: allAssets)
+                NSLog("%@", "PhotoKit call took \((-start.timeIntervalSinceNow).formatted()) seconds to read \(allAssets.count) photos")
+            }
         }
     }
 }

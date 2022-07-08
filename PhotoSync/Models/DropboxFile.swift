@@ -30,20 +30,22 @@ public extension DropboxFile {
         let existing = try await DropboxFile.matching("pathLower IN (%@)", args: [metadatas.map { $0.pathLower! }], in: context).uniqueBy(\.pathLower)
         let files = metadatas.compactMap { metadata -> DropboxFile? in
             guard let path = metadata.pathLower else { return nil }
-            let file = existing[path] ?? context.insertObject()
+            let file = existing[path] ?? context.performAndWait { context.insertObject() }
             file.update(from: metadata)
             return file
         }
+        try await context.performSave()
+
+        let newExisting = try await DropboxFile.matching("pathLower IN (%@)", args: [metadatas.map { $0.pathLower! }], in: context).uniqueBy(\.pathLower)
         deletedMetadatas.forEach { deleted in
-            if let path = deleted.pathLower, let file = existing[path] {
-                context.perform {
+            if let path = deleted.pathLower, let file = newExisting[path] {
+                context.performAndWait {
                     context.delete(file)
                 }
             }
         }
-        try await context.perform {
-            try context.save()
-        }
+        try await context.performSave()
+
         return files
     }
 
@@ -57,10 +59,7 @@ public extension DropboxFile {
                 context.delete(file)
             }
         }
-        try await context.perform {
-            try context.save()
-            context.reset()
-        }
+        try await context.performSave(andReset: true)
     }
 
     internal func update(from metadata: Files.FileMetadata) {

@@ -17,7 +17,7 @@ public class SyncToken: NSManagedObject, ManagedObject {
             case .dropboxAuth:
                 return 1
             case .dropboxListFolder:
-                return 1
+                return 3
             case .photoKit:
                 return 1
             }
@@ -38,7 +38,7 @@ public extension SyncToken {
         archiver.encode(value, forKey: "data")
         archiver.encode(type.version, forKey: "version")
         try await insertOrUpdate(type: type, value: archiver.encodedData, into: context)
-        try context.save()
+        try await context.performSave()
     }
 
     @discardableResult
@@ -49,7 +49,7 @@ public extension SyncToken {
             existing.value = value
             return existing
         } else {
-            let created: SyncToken = context.insertObject()
+            let created: SyncToken = await context.perform { context.insertObject() }
             created.type = type.rawValue
             created.value = value
             return created

@@ -98,6 +98,7 @@ class StatusViewController: UIViewController {
     }
 
     func render() {
+        assert(Thread.isMainThread)
         switch syncManager.photoState {
         case .none:
             photoKitStatusLabel.text = "Not started"

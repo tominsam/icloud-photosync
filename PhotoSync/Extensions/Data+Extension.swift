@@ -18,7 +18,9 @@ extension InputStream {
 
     // Method: https://www.dropbox.com/developers/reference/content-hash
     // based on https://gist.github.com/crspybits/8a5c8df80fa9d5da955f338c4fef124f
-    func dropboxContentHash() -> String? {
+    // This should be async, it's potentially reading hundreds of megs off disk,
+    // but in practice it seems to be really really fast, so it's not a priority
+    func dropboxContentHash() -> String {
         let blockSize = 1024 * 1024 * 4
 
         var inputBuffer = [UInt8](repeating: 0, count: blockSize)
@@ -33,7 +35,7 @@ extension InputStream {
                 // EOF
                 break
             } else if length < 0 {
-                return nil
+                assertionFailure()
             }
 
             let dataBlock = Data(bytes: inputBuffer, count: length)
@@ -49,13 +51,13 @@ extension InputStream {
 }
 
 extension Data {
-    func dropboxContentHash() -> String? {
+    func dropboxContentHash() -> String {
         return InputStream(data: self).dropboxContentHash()
     }
 }
 
 extension URL {
-    func dropboxContentHash() -> String? {
-        return InputStream(url: self)?.dropboxContentHash()
+    func dropboxContentHash() -> String {
+        return InputStream(url: self)!.dropboxContentHash()
     }
 }

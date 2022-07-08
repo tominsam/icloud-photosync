@@ -10,6 +10,7 @@ import UIKit
 struct ServiceError {
     let path: String
     let message: String
+    let error: Error?
 }
 
 struct ServiceState {
@@ -41,32 +42,10 @@ class SyncManager {
     public weak var delegate: SyncManagerDelegate?
 
     public var isLoggedIn: Bool { return dropboxClient != nil }
-    private var dropboxClient: DropboxClient?
+    private var dropboxClient: DropboxClient? { DropboxClientsManager.authorizedClient }
 
     init(persistentContainer: NSPersistentContainer) {
         self.persistentContainer = persistentContainer
-        connect()
-    }
-
-    func connect() {
-        if let accessToken = keychain.get(Self.KeychainDropboxAccessToken) {
-            dropboxClient = DropboxClient(accessToken: accessToken)
-        } else {
-            dropboxClient = nil
-        }
-    }
-
-    func logIn(accessToken: String) {
-        keychain.set(accessToken, forKey: Self.KeychainDropboxAccessToken)
-        connect()
-    }
-
-    func logOut() {
-        dropboxClient?.auth.tokenRevoke().response { _, _ in
-            // We don't care if there are errors
-        }
-        keychain.delete(Self.KeychainDropboxAccessToken)
-        dropboxClient = nil
     }
 
     func maybeSync() {
@@ -84,14 +63,17 @@ class SyncManager {
         syncing = true
 
         let photoManager = PhotoKitManager(persistentContainer: persistentContainer) { progress in
+            assert(Thread.isMainThread)
             self.photoState = progress
             self.delegate?.syncManagerUpdatedState(self)
         }
         let dropboxManager = DropboxManager(persistentContainer: persistentContainer, dropboxClient: client) { progress in
+            assert(Thread.isMainThread)
             self.dropboxState = progress
             self.delegate?.syncManagerUpdatedState(self)
         }
         let uploadManager = UploadManager(persistentContainer: persistentContainer, dropboxClient: client) { progress in
+            assert(Thread.isMainThread)
             self.uploadState = progress
             self.delegate?.syncManagerUpdatedState(self)
         }
@@ -106,14 +88,10 @@ class SyncManager {
                 try await photoFetch
                 try await dropboxFetch
 
-            } catch let error as SwiftyDropbox.CallError<SwiftyDropbox.Files.ListFolderError> {
-                switch error {
-                case .authError:
-                    self.logOut()
-                    // TODO this is not the way to handle auth errors!
-                default:
-                    fatalError(error.description)
-                }
+            } catch SwiftyDropbox.CallError<SwiftyDropbox.Files.ListFolderError>.authError,
+                    SwiftyDropbox.CallError<SwiftyDropbox.Files.ListFolderContinueError>.authError {
+                // TODO this is not the way to handle auth errors!
+                exit(1)
             } catch {
                 fatalError(error.localizedDescription)
             }

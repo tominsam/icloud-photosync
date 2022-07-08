@@ -14,6 +14,11 @@ public class Photo: NSManagedObject, ManagedObject {
     @NSManaged public var photoKitId: String!
     @NSManaged public var created: Date?
     @NSManaged public var modified: Date?
+
+    // The filename of the image in PhotoKit. Expensive to calculate (because we
+    // need to fetch all representations of the photo)
+    @NSManaged public var filename: String!
+
     // The path we want the image to have on disk. Derived from photokit data
     // Doesn't need the original version to be downloaded to achieve this, but
     // is a little expensive
@@ -31,7 +36,7 @@ public extension Photo {
         guard !assets.isEmpty else { return [] }
         let existing = try await Photo.matching("photoKitId IN (%@)", args: [assets.map { $0.localIdentifier }], in: context).uniqueBy(\.photoKitId)
         return assets.map { asset in
-            let photo = existing[asset.localIdentifier] ?? context.insertObject()
+            let photo = existing[asset.localIdentifier] ?? context.performAndWait { context.insertObject() }
             photo.update(from: asset)
             return photo
         }
@@ -51,11 +56,16 @@ public extension Photo {
             path = nil
             modified = asset.modificationDate
         }
+
+        if filename == nil {
+            filename = asset.filename ?? "DUMMY" // slow!
+        }
+
         // We're storing a path for the image in core data rather than deriving it every time, because
         // (a) it's slow to derive (because fetching the file type is expensive) and (b) we want it to be
         // consistent for every run of the app.
         if path == nil {
-            var path = asset.dropboxPath // slow!
+            var path = asset.dropboxPath(fromFilename: filename)
 
             // Are there any existing photos with this exact path? Can happen, Photos
             // makes no attempt to keep filenames unique. Keep appending a number to the
@@ -97,5 +107,9 @@ extension String {
 
         // Glue the path back together
         return ((prefix as NSString).appendingPathComponent(filename + suffix) as NSString).appendingPathExtension(pathExtension)!
+
+        // TODO this is generally a duplicate file. If the user merges the duplicates together, it would be really nice if
+        // we could also remove the (1) even if the remaining file is the (1) version
+
     }
 }

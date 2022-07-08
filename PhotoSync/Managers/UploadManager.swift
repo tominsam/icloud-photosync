@@ -6,107 +6,93 @@ import Foundation
 import Photos
 import SwiftyDropbox
 import UIKit
+import AsyncAlgorithms
 
-class UploadManager {
-    let persistentContainer: NSPersistentContainer
-    let dropboxClient: DropboxClient
-    let progressUpdate: @MainActor(ServiceState) -> Void
-
-    var state: ServiceState?
-
-    init(persistentContainer: NSPersistentContainer, dropboxClient: DropboxClient, progressUpdate: @MainActor @escaping (ServiceState) -> Void) {
-        self.persistentContainer = persistentContainer
-        self.dropboxClient = dropboxClient
-        self.progressUpdate = progressUpdate
-    }
+class UploadManager: Manager {
 
     func sync() async throws {
-        state = ServiceState()
         let context = persistentContainer.newBackgroundContext()
-        state!.total = await context.perform {
-            Photo.count(in: context)
+        let count = await context.perform { Photo.count(in: context) }
+        await setTotal(count)
+
+        let (changes, deletions) = try await iterateAllPhotos(inContext: context)
+
+        let uploads = changes.filter { $0.isNewFile }
+        let replacements = uploads.filter { !$0.isNewFile }
+
+        NSLog("%@", "Accumulated \(uploads.count) uploads, \(replacements.count) replacements, and \(deletions.count) deletions")
+        await setTotal(uploads.count + replacements.count + deletions.count)
+
+        // prioritize new files
+        await uploads.chunked(into: 10).parallelMap(maxJobs: 3) { chunk in
+            await self.upload(chunk)
+            await self.addProgress(chunk.count)
         }
+
+        // then upload changed files
+        await replacements.chunked(into: 10).parallelMap(maxJobs: 3) { chunk in
+            await self.upload(chunk)
+            await self.addProgress(chunk.count)
+        }
+
+        // then delete removed files
+        await deletions.chunked(into: 20).parallelMap(maxJobs: 4) { chunk in
+            await self.delete(chunk)
+            await self.addProgress(chunk.count)
+        }
+
+        NSLog("%@", "Upload complete")
+        await markComplete()
+    }
+
+    func upload(_ tasks: [BatchUploader.UploadTask]) async {
+        let finishResults = await BatchUploader.batchUpload(persistentContainer: persistentContainer, dropboxClient: dropboxClient, tasks: tasks)
+        for result in finishResults {
+            if case let .failure(path, message, error) = result {
+                await recordError(ServiceError(path: path, message: message, error: error))
+            }
+        }
+    }
+
+    func delete(_ tasks: [DeleteOperation.DeleteTask]) async {
+        do {
+            try await DeleteOperation.deleteFiles(persistentContainer: self.persistentContainer, dropboxClient: self.dropboxClient, tasks: tasks)
+        } catch {
+            await self.recordError(ServiceError(path: "", message: error.localizedDescription, error: error))
+        }
+    }
+
+    func iterateAllPhotos(inContext context: NSManagedObjectContext) async throws -> ([BatchUploader.UploadTask], [DeleteOperation.DeleteTask]) {
+        let allPhotos = try await Photo.matching(nil, in: context)
+        let assets = await PHAsset.allAssets.uniqueBy(\.localIdentifier)
+        var dropboxFiles = try await DropboxFile.matching(nil, in: context).uniqueBy(\.pathLower)
 
         var uploads = [BatchUploader.UploadTask]()
         var deletions = [DeleteOperation.DeleteTask]()
 
-        try await iterateAllPhotos(inContext: context) { photo, asset, dropboxFile in
-            switch (asset, dropboxFile) {
-            case (.none, .none):
-                // No photokit object, no dropbox object. The local photo object should not exist
-                await context.perform {
-                    context.delete(photo)
-                }
+        for photo in allPhotos {
+            let asset = assets[photo.photoKitId]
+            guard let asset else {
+                await context.perform { context.delete(photo) }
+                continue
+            }
 
-            case let (.some(asset), .none):
-                // Object exists in PhotoKit but not in dropbox. Upload it
-                uploads.append(.init(asset: asset, filename: photo.path, existingContentHash: nil))
+            let file = dropboxFiles[photo.path.localizedLowercase]
+            dropboxFiles.removeValue(forKey: photo.path.localizedLowercase)
 
-            case let (.none, .some(file)):
-                // Object exists in dropbox but not PhotoKit. Delete from Dropbox
-                deletions.append(.init(photoKitId: photo.photoKitId, file: file))
-
-            case let (.some(asset), .some(file)):
-                // Object exists in both. Does it need syncing
-                if photo.contentHash != file.contentHash {
-                    uploads.append(.init(asset: asset, filename: photo.path, existingContentHash: file.contentHash))
-                }
+            if file == nil || photo.contentHash != file?.contentHash {
+                uploads.append(BatchUploader.UploadTask(asset: asset, filename: photo.path, existingContentHash: file?.contentHash, isNewFile: file == nil))
             }
         }
 
-        NSLog("%@", "Accumulated \(uploads.count) uploads and \(deletions.count) deletions")
-        state!.total = uploads.count + deletions.count
-        state!.progress = 0
-        await progressUpdate(state!)
-
-        // This fetches the photo and does the upload.
-        // TODO - we're going half as fast as we could because we're waiting to download
-        // the images, then waiting to upload the images - we should be pre-fetching the
-        // photos in advance of the upload
-        for chunk in uploads.chunked(into: 10) {
-            try await upload(chunk)
-            state!.progress += chunk.count
-            await progressUpdate(state!)
+        // Anything left in the dropbox files list needs to be deleted,
+        // but isn't in the local photos database
+        for (_, file) in dropboxFiles {
+            deletions.append(DeleteOperation.DeleteTask(file: file))
         }
+        // delete more recent files first
+        deletions.sort { (lhs, rhs) in lhs.file.pathLower > rhs.file.pathLower }
 
-        for chunk in deletions.chunked(into: 10) {
-            // TODO: fix deletions
-            //                for deletion in deletions {
-            //                    try await DeleteOperation.deleteFile(persistentContainer: persistentContainer, dropboxClient: dropboxClient, task: deletion)
-            //                }
-            state!.progress += chunk.count
-            await progressUpdate(state!)
-        }
-
-        NSLog("%@", "Upload complete")
-
-        state!.progress = state!.total
-        await progressUpdate(state!)
-    }
-
-    func upload(_ tasks: [BatchUploader.UploadTask]) async throws {
-        let finishResults = try await BatchUploader.batchUpload(persistentContainer: persistentContainer, dropboxClient: dropboxClient, tasks: tasks)
-        for result in finishResults {
-            if case let .failure(path, message) = result {
-                state!.errors.append(ServiceError(path: path, message: message))
-            }
-        }
-        await progressUpdate(state!)
-    }
-
-    func iterateAllPhotos(inContext context: NSManagedObjectContext, withBlock block: (Photo, PHAsset?, DropboxFile?) async -> Void) async throws {
-        let allPhotos = try await Photo.matching("1=1", in: context)
-        for photos in allPhotos.chunked(into: 500) {
-            // Bulk fetch related assets (photokit photos and dropbox files) for this block
-            let rawAssets = PHAsset.fetchAssets(withLocalIdentifiers: photos.map { $0.photoKitId }, options: nil)
-            let assets = (0 ..< rawAssets.count).map { rawAssets.object(at: $0) }.uniqueBy(\.localIdentifier)
-            let dropboxFiles = try await DropboxFile.matching("pathLower IN %@", args: [photos.map { $0.path.localizedLowercase }], in: context).uniqueBy(\.pathLower)
-
-            for photo in photos {
-                let asset = assets[photo.photoKitId]
-                let dropboxFile = dropboxFiles[photo.path.localizedLowercase]
-                await block(photo, asset, dropboxFile)
-            }
-        }
+        return (uploads, deletions)
     }
 }

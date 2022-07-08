@@ -12,6 +12,15 @@ extension NSManagedObjectContext {
     func insertObject<A: NSManagedObject>() -> A {
         return NSEntityDescription.insertNewObject(forEntityName: A.entity().managedObjectClassName, into: self) as! A
     }
+
+    func performSave(andReset: Bool = false) async throws {
+        try await self.perform {
+            try self.save()
+            if andReset {
+                self.reset()
+            }
+        }
+    }
 }
 
 public protocol ManagedObject: NSFetchRequestResult {

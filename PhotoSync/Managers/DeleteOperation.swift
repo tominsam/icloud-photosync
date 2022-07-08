@@ -12,22 +12,58 @@ import Photos
 import SwiftyDropbox
 import UIKit
 
+enum DeleteError: Error {
+    case otherResponse
+}
+
 class DeleteOperation {
     struct DeleteTask {
-        let photoKitId: String
         let file: DropboxFile
     }
 
-    static func deleteFile(persistentContainer: NSPersistentContainer, dropboxClient: DropboxClient, task: DeleteTask) async throws {
-        _ = try await dropboxClient.files.deleteV2(path: task.file.pathLower, parentRev: task.file.rev).asyncResponse()
-        NSLog("Deleted \(task.file.pathLower)")
+    static func deleteFiles(persistentContainer: NSPersistentContainer, dropboxClient: DropboxClient, tasks: [DeleteTask]) async throws {
+        let entries = tasks.map { task in
+            Files.DeleteArg(path: task.file.pathLower, parentRev: task.file.rev)
+        }
+        NSLog("%@", "Deleting \(tasks.count) files")
 
-        // It's neither in the local store or the remote. We can remove it from the database
+        let batch = try await dropboxClient.files.deleteBatch(entries: entries).asyncResponse()
+        switch batch {
+        case .complete:
+            return
+        case .asyncJobId(let jobId):
+            try await wait(dropboxClient: dropboxClient, jobId: jobId)
+        case .other:
+            throw DeleteError.otherResponse
+        }
+
         let context = persistentContainer.newBackgroundContext()
-        if let photo = try await Photo.matching("photoKitId = %@", args: [task.photoKitId], in: context).first {
-            try await context.perform {
-                context.delete(photo)
-                try context.save()
+        try await context.perform {
+            tasks.forEach { task in
+                context.delete(context.object(with: task.file.objectID))
+            }
+            try context.save()
+        }
+        NSLog("%@", "Deleted \(tasks.count) files")
+    }
+
+    static func wait(dropboxClient: DropboxClient, jobId: String) async throws {
+        while true {
+            NSLog("%@", "Waiting")
+            // Wait a random amount before polling again
+            try? await Task.sleep(nanoseconds: 4_000_000 * UInt64.random(in: 1_000..<2_000))
+            let batch = try await dropboxClient.files.deleteBatchCheck(asyncJobId: jobId).asyncResponse()
+            switch batch {
+            case .complete:
+                // We're done
+                return
+            case .inProgress:
+                // Loop again
+                break
+            case .failed(let error):
+                throw error
+            case .other:
+                throw DeleteError.otherResponse
             }
         }
     }

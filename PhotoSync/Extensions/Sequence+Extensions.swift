@@ -33,3 +33,25 @@ extension Array {
         }
     }
 }
+
+extension Collection where Element: Sendable {
+    // Notes - return ordering is indeterminate, should fix that
+    @discardableResult
+    func parallelMap<T>(maxJobs: Int = 5, block: @escaping (Element) async throws -> T) async rethrows -> [T] {
+        var results = [T]()
+        try await withThrowingTaskGroup(of: T.self) { group in
+            for (offset, element) in enumerated() {
+                if offset >= maxJobs {
+                    results.append(try await group.next()!)
+                }
+                group.addTask {
+                    return try await block(element)
+                }
+            }
+            for try await result in group {
+                results.append(result)
+            }
+        }
+        return results
+    }
+}

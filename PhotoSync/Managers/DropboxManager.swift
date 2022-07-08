@@ -1,36 +1,22 @@
 //  Copyright 2020 Thomas Insam. All rights reserved.
 
 import CoreData
+import Foundation
 import Photos
 import SwiftyDropbox
 import UIKit
 
-class DropboxManager {
-    public var state: ServiceState?
-
-    let persistentContainer: NSPersistentContainer
-    let dropboxClient: DropboxClient
-    let progressUpdate: @MainActor(ServiceState) -> Void
-
-    init(persistentContainer: NSPersistentContainer, dropboxClient: DropboxClient, progressUpdate: @escaping (ServiceState) -> Void) {
-        self.persistentContainer = persistentContainer
-        self.dropboxClient = dropboxClient
-        self.progressUpdate = progressUpdate
-    }
+class DropboxManager: Manager {
 
     func sync() async throws {
-        if state != nil {
-            return
-        }
-        state = ServiceState()
         let context = persistentContainer.newBackgroundContext()
 
         // This is a guess, of course - we don't get a count from DB
         // at any point, so the best number we have is "the last number"
-        state?.total = await context.perform {
+        let count = await context.perform {
             DropboxFile.count(in: context)
         }
-        await progressUpdate(state!)
+        await setTotal(count)
 
         // Try to resume a previous run if possible
         var cursor = (try await SyncToken.dataFor(type: .dropboxListFolder, in: context) as NSString?) as String?
@@ -47,11 +33,15 @@ class DropboxManager {
             // the root of the Dropbox, this is the root of the app-specific folder we own.
             let listResult: Files.ListFolderResult
             do {
-                listResult = try await dropboxClient.files.listFolder(path: "", recursive: true, includeDeleted: true).asyncResponse()
+                listResult = try await dropboxClient.files.listFolder(path: "", recursive: true, includeDeleted: true, limit: 2000).asyncResponse()
+            } catch let error as SwiftyDropbox.CallError<SwiftyDropbox.Files.ListFolderError> {
+                NSLog("Error calling dropbox listFolder: %@", error.description)
+                await recordError(ServiceError(path: "/", message: error.description, error: error))
+                throw error
             } catch {
                 NSLog("Error calling dropbox listFolder: %@", error.localizedDescription)
-                state?.errors.append(ServiceError(path: "/", message: error.localizedDescription))
-                return
+                await recordError(ServiceError(path: "/", message: error.localizedDescription, error: error))
+                throw error
             }
             cursor = try await gotPage(listResult, context: context)
         }
@@ -64,8 +54,8 @@ class DropboxManager {
                 listResult = try await dropboxClient.files.listFolderContinue(cursor: cursor!).asyncResponse()
             } catch {
                 NSLog("Error calling dropbox listFolderContinue: %@", error.localizedDescription)
-                state?.errors.append(ServiceError(path: "/", message: error.localizedDescription))
-                return
+                await recordError(ServiceError(path: "/", message: error.localizedDescription, error: error))
+                throw error
             }
             cursor = try await gotPage(listResult, context: context)
             if !listResult.hasMore {
@@ -75,17 +65,16 @@ class DropboxManager {
         }
 
         NSLog("%@", "File sync complete")
-        state?.complete = true
-        await progressUpdate(state!)
+        await markComplete()
     }
 
     func gotPage(_ listResult: Files.ListFolderResult, context: NSManagedObjectContext) async throws -> String {
-        try await self.insertPage(listResult: listResult, progressUpdate: progressUpdate)
+        try await self.insertPage(listResult: listResult)
         try await SyncToken.insertOrUpdate(type: .dropboxListFolder, value: listResult.cursor as NSString, into: context)
         return listResult.cursor
     }
 
-    func insertPage(listResult: Files.ListFolderResult, progressUpdate: @MainActor @escaping (ServiceState) -> Void) async throws {
+    func insertPage(listResult: Files.ListFolderResult) async throws {
         // There are also folders in this list but they're unimportant
         let fileMetadata = listResult.entries.compactMap { $0 as? Files.FileMetadata }
         let deletedMetadata = listResult.entries.compactMap { $0 as? Files.DeletedMetadata }
@@ -93,12 +82,10 @@ class DropboxManager {
 
         let context = persistentContainer.newBackgroundContext()
         try await DropboxFile.insertOrUpdate(fileMetadata, delete: deletedMetadata, into: context)
+
         let total = DropboxFile.count(in: context)
-
-        state?.progress += fileMetadata.count
-        state?.total = total
-
-        await progressUpdate(state!)
+        await setTotal(total)
+        await setProgress(total)
     }
 
 }

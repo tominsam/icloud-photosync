@@ -59,8 +59,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     func application(_: UIApplication, open url: URL, options _: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
         return DropboxClientsManager.handleRedirectURL(url) { authResult in
             switch authResult {
-            case let .success(accessToken):
-                self.syncManager.logIn(accessToken: accessToken.accessToken)
+            case .success:
                 self.updateDropboxNavigationItem()
                 self.syncManager.maybeSync()
             case .cancel:
@@ -106,7 +105,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         let item: UIBarButtonItem
         if syncManager.isLoggedIn {
             item = UIBarButtonItem(title: "Log out", action: {
-                self.syncManager.logOut()
+                DropboxClientsManager.resetClients()
                 self.updateDropboxNavigationItem()
                 self.startDropboxSync()
             })

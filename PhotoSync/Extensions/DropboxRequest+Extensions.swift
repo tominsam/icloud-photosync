@@ -4,6 +4,7 @@ import SwiftyDropbox
 import UIKit
 
 extension SwiftyDropbox.CallError: Error {}
+extension SwiftyDropbox.Files.DeleteBatchError: Error {}
 
 extension SwiftyDropbox.UploadRequest {
     func asyncResponse() async throws -> RSerial.ValueType {

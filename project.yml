@@ -12,6 +12,9 @@ packages:
   CollectionConcurrencyKit:
     url: https://github.com/JohnSundell/CollectionConcurrencyKit.git
     revision: b4f23e24b5a1bff301efc5e70871083ca029ff95
+  AsyncAlgorithms:
+    url: https://github.com/apple/swift-async-algorithms
+    from: 0.0.3
 
 targets:
   PhotoSync:
@@ -44,6 +47,7 @@ targets:
       - package: SwiftyDropbox
       - package: KeychainSwift
       - package: CollectionConcurrencyKit
+      - package: AsyncAlgorithms
     info:
       path: Info.plist
       properties:

@@ -57,40 +57,24 @@ class PhotoKitManager {
          photos from my local library, where I get about 15k photos per second written into the data store.
          */
 
-        let allPhotosOptions = PHFetchOptions()
-        allPhotosOptions.includeHiddenAssets = false
-        allPhotosOptions.wantsIncrementalChangeDetails = true
-        allPhotosOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
-
-        // This blocks very briefly - 0.2 seconds on my physical
-        // device for 70k photos - so I'm not super bothered right now.
-        let allPhotos = PHAsset.fetchAssets(with: allPhotosOptions)
-
-        let count = allPhotos.count
-        NSLog("%@", "Phone has \(count) photo(s)")
+        NSLog("%@", "Getting photos")
+        let allPhotos = await PHAsset.allAssets
 
         // First sync is slow because we have no photo paths, and those are expensive,
         // so it's better to update more frequently, later syncs are bound by DB insert
         // rate, and larger blocks are more efficient.
         let fetchSize = firstSync ? 50 : 400
-        state?.total = count
+        state?.total = allPhotos.count
 
-        for index in stride(from: 0, to: count, by: fetchSize) {
-            state!.progress = index
+        for chunk in allPhotos.chunked(into: fetchSize) {
+            state!.progress += fetchSize
             await progressUpdate(state!)
-
-            let top = min(count, index + fetchSize)
-            let assets = allPhotos.objects(at: IndexSet(integersIn: index ..< top))
-
-            try await Photo.insertOrUpdate(assets, into: context)
-            try await context.perform {
-                try context.save()
-                context.reset()
-            }
+            try await Photo.insertOrUpdate(chunk, into: context)
+            try await context.performSave(andReset: true)
         }
 
         let duration = Double(DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds) / 1_000_000_000
-        NSLog("Synced %d photos in %0.1f seconds (%.0f per second)", count, duration, Double(count) / duration)
+        NSLog("Synced %d photos in %0.1f seconds (%.0f per second)", allPhotos.count, duration, Double(allPhotos.count) / duration)
 
         state?.complete = true
         let total = state?.total ?? 0
