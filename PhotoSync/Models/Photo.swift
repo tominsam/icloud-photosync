@@ -6,9 +6,10 @@ import Photos
 
 @objc(Photo)
 public class Photo: NSManagedObject, ManagedObject {
-    public static var defaultSortDescriptors: [NSSortDescriptor] {
-        return [NSSortDescriptor(key: "created", ascending: false)]
-    }
+    public static var defaultSortDescriptors = [
+        NSSortDescriptor(key: "created", ascending: false),
+        NSSortDescriptor(key: "photoKitId", ascending: true)
+    ]
 
     // Properties from photokit
     @NSManaged public var photoKitId: String!
@@ -50,11 +51,38 @@ public extension Photo {
         return try await Photo.matching("photoKitId = %@", args: [asset.localIdentifier], in: context).first
     }
 
-    static func clearCalculatedPaths(in context: NSManagedObjectContext) throws {
+    static func generateUniqueFilenames(in context: NSManagedObjectContext) async throws {
         let request = NSBatchUpdateRequest(entity: entity())
         request.predicate = NSPredicate(format: "1=1")
         request.propertiesToUpdate = ["path": NSNull()]
         try context.execute(request)
+
+        var allAssignedPaths = Set<String>()
+        let allPhotos: [Photo] = try await Photo.matching(nil, in: context)
+            .filter { $0.preferredPath != nil }
+            .sorted { (lhs, rhs) -> Bool in
+                if let ld = lhs.created, let rd = rhs.created, ld != rd {
+                    return ld < rd
+                }
+                return lhs.photoKitId < rhs.photoKitId
+            }
+
+        for photo in allPhotos {
+            // Are there any existing photos with this exact path? Can happen, Photos
+            // makes no attempt to keep filenames unique. Keep appending a number to the
+            // filename until we get something unique. Remember that files systems are
+            // often not case sensitive!
+            // TODO extract this from the inner loop because it's the slowest part of startup now
+            var path = photo.preferredPath!
+            while allAssignedPaths.contains(path) {
+                let newPath = path.incrementFilenameMagicNumber()
+                NSLog("%@", "Generating new version of \(path) -> \(newPath)")
+                path = newPath
+            }
+            allAssignedPaths.insert(path)
+            photo.path = path
+        }
+        try await context.performSave(andReset: true)
     }
 
     private func update(from asset: PHAsset) {
@@ -79,18 +107,6 @@ public extension Photo {
             preferredPath = asset.dropboxPath(fromFilename: filename)
         }
 
-        // Are there any existing photos with this exact path? Can happen, Photos
-        // makes no attempt to keep filenames unique. Keep appending a number to the
-        // filename until we get something unique. Remember that files systems are
-        // often not case sensitive!
-        // TODO extract this from the inner loop because it's the slowest part of startup now
-        path = preferredPath
-        while Photo.count("path == %@ && photoKitId != %@", args: [path!, photoKitId!], in: managedObjectContext!) > 0 {
-            let newPath = path.incrementFilenameMagicNumber()
-            NSLog("%@", "Generating new version of \(path!) -> \(newPath)")
-            path = newPath
-        }
-        self.path = path
     }
 }
 

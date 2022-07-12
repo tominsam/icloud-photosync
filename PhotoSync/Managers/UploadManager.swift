@@ -10,12 +10,12 @@ import AsyncAlgorithms
 
 class UploadManager: Manager {
 
-    func sync() async throws {
+    func sync(allAssets: [PHAsset]) async throws {
         let context = persistentContainer.newBackgroundContext()
         let count = await context.perform { Photo.count(in: context) }
         await setTotal(count)
 
-        let (changes, deletions) = try await iterateAllPhotos(inContext: context)
+        let (changes, deletions) = try await iterateAllPhotos(inContext: context, allAssets: allAssets)
 
         let uploads = changes.filter { $0.isNewFile }
         let replacements = changes.filter { !$0.isNewFile }
@@ -62,9 +62,9 @@ class UploadManager: Manager {
         }
     }
 
-    func iterateAllPhotos(inContext context: NSManagedObjectContext) async throws -> ([BatchUploader.UploadTask], [DeleteOperation.DeleteTask]) {
+    func iterateAllPhotos(inContext context: NSManagedObjectContext, allAssets: [PHAsset]) async throws -> ([BatchUploader.UploadTask], [DeleteOperation.DeleteTask]) {
         let allPhotos = try await Photo.matching(nil, in: context)
-        let assets = await PHAsset.allAssets.uniqueBy(\.localIdentifier)
+        let assets = allAssets.uniqueBy(\.localIdentifier)
         var dropboxFiles = try await DropboxFile.matching(nil, in: context).uniqueBy(\.pathLower)
 
         var uploads = [BatchUploader.UploadTask]()
@@ -93,6 +93,7 @@ class UploadManager: Manager {
         // delete more recent files first
         deletions.sort { (lhs, rhs) in lhs.file.pathLower > rhs.file.pathLower }
 
+        try await context.performSave()
         return (uploads, deletions)
     }
 }

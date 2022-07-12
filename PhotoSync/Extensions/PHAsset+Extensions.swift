@@ -133,12 +133,11 @@ extension PHAsset {
                                 continuation.resume(throwing: AssetError.fetch("Can't export video", nil))
                             }
                         }
-                        // TODO do I need to delete these urls?
 
                     } else if let avUrlAsset = avAsset as? AVURLAsset {
                         NSLog("%@", "Video downloaded as \(avUrlAsset.url)")
                         continuation.resume(returning: .url(avUrlAsset.url, hash: avUrlAsset.url.dropboxContentHash()))
-                        // TODO do I need to delete these urls?
+
                     } else {
                         let error = info?[PHImageErrorKey] as? Error
                         NSLog("Photo fetch failed: %@", error.map { String(describing: $0) } ?? "")

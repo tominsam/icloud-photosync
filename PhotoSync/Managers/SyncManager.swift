@@ -110,7 +110,7 @@ class SyncManager {
 
             do {
                 NSLog("%@", "Starting upload")
-                try await uploadManager.sync()
+                try await uploadManager.sync(allAssets: photoManager.allAssets)
                 syncing = false
             } catch {
                 NSLog("%@", "Upload failed - \(error) \(String(describing: error)) \(error.localizedDescription)")

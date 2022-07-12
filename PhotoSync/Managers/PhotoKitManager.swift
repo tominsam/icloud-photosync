@@ -21,6 +21,8 @@ class PhotoKitManager: Manager {
         }
     }
 
+    var allAssets: [PHAsset] = []
+
     func sync() async throws {
         let start = DispatchTime.now()
 
@@ -28,18 +30,6 @@ class PhotoKitManager: Manager {
         let count = Photo.count(in: context)
         await setTotal(count)
         let firstSync = count == 0
-
-        // If the user deletes one of of a pair of files with the same name,
-        // I want to restore the original name to whichever is left - that means
-        // that the path generation code needs to be safe, and return the same
-        // result when called repeatedly on the same data set, but also generate
-        // new data when called on a new dataset. (And be consistent cross-platform)
-        // That's done by having every Photo have a cached "this is the path that
-        // I want" that is expensive to calculate, then on parse we loop through
-        // the photos in a _consistent order_ and generate the actual output paths.
-        // This should be deterministic when you leave both files in place.
-        NSLog("%@", "Resetting paths")
-        try Photo.clearCalculatedPaths(in: context)
 
         /*
          The PhotoKit API is very very fast - updating the Photo objects in core data is the bottleneck here.
@@ -57,22 +47,34 @@ class PhotoKitManager: Manager {
          */
 
         NSLog("%@", "Getting photos")
-        let allPhotos = await PHAsset.allAssets
+        allAssets = await PHAsset.allAssets
 
         // First sync is slow because we have no photo paths, and those are expensive,
         // so it's better to update more frequently, later syncs are bound by DB insert
         // rate, and larger blocks are more efficient.
         let fetchSize = firstSync ? 200 : 1000
-        await setTotal(allPhotos.count)
+        await setTotal(allAssets.count)
 
-        for chunk in allPhotos.chunked(into: fetchSize) {
+        for chunk in allAssets.chunked(into: fetchSize) {
             await addProgress(fetchSize)
             try await Photo.insertOrUpdate(chunk, into: context)
             try await context.performSave(andReset: true)
         }
 
+        // If the user deletes one of of a pair of files with the same name,
+        // I want to restore the original name to whichever is left - that means
+        // that the path generation code needs to be safe, and return the same
+        // result when called repeatedly on the same data set, but also generate
+        // new data when called on a new dataset. (And be consistent cross-platform)
+        // That's done by having every Photo have a cached "this is the path that
+        // I want" that is expensive to calculate, then on parse we loop through
+        // the photos in a _consistent order_ and generate the actual output paths.
+        // This should be deterministic when you leave both files in place.
+        NSLog("%@", "Calculating unique filenames")
+        try await Photo.generateUniqueFilenames(in: context)
+
         let duration = Double(DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds) / 1_000_000_000
-        NSLog("Synced %d photos in %0.1f seconds (%.0f per second)", allPhotos.count, duration, Double(allPhotos.count) / duration)
+        NSLog("Synced %d photos in %0.1f seconds (%.0f per second)", allAssets.count, duration, Double(allAssets.count) / duration)
         await markComplete()
     }
 }
