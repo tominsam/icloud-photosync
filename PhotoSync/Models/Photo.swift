@@ -18,16 +18,12 @@ public class Photo: NSManagedObject, ManagedObject {
 
     // The filename of the image in PhotoKit. Expensive to calculate (because we
     // need to fetch all representations of the photo)
-    @NSManaged public var filename: String!
+    @NSManaged public var filename: String?
 
     // The path we want the image to have on disk. Derived from photokit data
     // Doesn't need the original version to be downloaded to achieve this, but
     // is a little expensive
-    @NSManaged public var preferredPath: String!
-
-    // The path we expect the file to have on disk - this is de-duplicated based
-    // on if there's an existing file at the current path
-    @NSManaged public var path: String!
+    @NSManaged public var preferredPath: String?
 
     // The dropbox contenthash of the image. nil becaue we need the
     // image data to calculate this, so I'll only set it when I
@@ -47,18 +43,28 @@ public extension Photo {
         }
     }
 
-    static func forAsset(_ asset: PHAsset, in context: NSManagedObjectContext) async throws -> Photo? {
-        return try await Photo.matching("photoKitId = %@", args: [asset.localIdentifier], in: context).first
+    static func forLocalIdentifier(_ localIdentifier: String, in context: NSManagedObjectContext) async throws -> Photo? {
+        return try await Photo.matching("photoKitId = %@", args: [localIdentifier], in: context).first
     }
 
-    static func generateUniqueFilenames(in context: NSManagedObjectContext) async throws {
-        let request = NSBatchUpdateRequest(entity: entity())
-        request.predicate = NSPredicate(format: "1=1")
-        request.propertiesToUpdate = ["path": NSNull()]
-        try context.execute(request)
+    struct PhotoMapping {
+        let photoKitId: String
+        let path: String
+        let contentHash: String?
+    }
 
-        var allAssignedPaths = Set<String>()
-        let allPhotos: [Photo] = try await Photo.matching(nil, in: context)
+    static func allPhotosWithUniqueFilenames(in context: NSManagedObjectContext) async throws -> [PhotoMapping] {
+        // If the user deletes one of of a pair of files with the same name,
+        // I want to restore the original name to whichever is left - that means
+        // that the path generation code needs to be safe, and return the same
+        // result when called repeatedly on the same data set, but also generate
+        // new data when called on a new dataset. (And be consistent cross-platform)
+        // That's done by having every Photo have a cached "this is the path that
+        // I want" that is expensive to calculate, then on parse we loop through
+        // the photos in a _consistent order_ and generate the actual output paths.
+        // This should be deterministic when you leave both files in place.
+
+        let allPhotos = try await Photo.matching(nil, in: context)
             .filter { $0.preferredPath != nil }
             .sorted { (lhs, rhs) -> Bool in
                 if let ld = lhs.created, let rd = rhs.created, ld != rd {
@@ -67,22 +73,18 @@ public extension Photo {
                 return lhs.photoKitId < rhs.photoKitId
             }
 
-        for photo in allPhotos {
-            // Are there any existing photos with this exact path? Can happen, Photos
-            // makes no attempt to keep filenames unique. Keep appending a number to the
+        var allAssignedPaths = Set<String>()
+        return allPhotos.map { photo in
+            // Photos makes no attempt to keep filenames unique. Keep appending a number to the
             // filename until we get something unique. Remember that files systems are
             // often not case sensitive!
-            // TODO extract this from the inner loop because it's the slowest part of startup now
             var path = photo.preferredPath!
             while allAssignedPaths.contains(path) {
-                let newPath = path.incrementFilenameMagicNumber()
-                NSLog("%@", "Generating new version of \(path) -> \(newPath)")
-                path = newPath
+                path = path.incrementFilenameMagicNumber()
             }
             allAssignedPaths.insert(path)
-            photo.path = path
+            return PhotoMapping(photoKitId: photo.photoKitId, path: path, contentHash: photo.contentHash)
         }
-        try await context.performSave(andReset: true)
     }
 
     private func update(from asset: PHAsset) {
@@ -90,20 +92,21 @@ public extension Photo {
         created = asset.creationDate
         if modified != asset.modificationDate {
             // if the file has been changed, invalidate the content hash
-            contentHash = nil
             // and the path (because you can change the date on photos)
-            path = nil
+            filename = nil
+            contentHash = nil
+            preferredPath = nil
             modified = asset.modificationDate
         }
 
         if filename == nil {
-            filename = asset.filename ?? "DUMMY" // slow!
+            filename = asset.filename // slow!
         }
 
         // We're storing a path for the image in core data rather than deriving it every time, because
         // (a) it's slow to derive (because fetching the file type is expensive) and (b) we want it to be
         // consistent for every run of the app.
-        if preferredPath == nil {
+        if let filename = filename, preferredPath == nil {
             preferredPath = asset.dropboxPath(fromFilename: filename)
         }
 

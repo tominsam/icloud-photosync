@@ -63,7 +63,7 @@ class UploadManager: Manager {
     }
 
     func iterateAllPhotos(inContext context: NSManagedObjectContext, allAssets: [PHAsset]) async throws -> ([BatchUploader.UploadTask], [DeleteOperation.DeleteTask]) {
-        let allPhotos = try await Photo.matching(nil, in: context)
+        let allPhotos = try await Photo.allPhotosWithUniqueFilenames(in: context)
         let assets = allAssets.uniqueBy(\.localIdentifier)
         var dropboxFiles = try await DropboxFile.matching(nil, in: context).uniqueBy(\.pathLower)
 
@@ -73,10 +73,10 @@ class UploadManager: Manager {
         for photo in allPhotos {
             let asset = assets[photo.photoKitId]
             guard let asset else {
-                await context.perform { context.delete(photo) }
                 continue
             }
 
+            // Track the dropbox files we've seen in photokit
             let file = dropboxFiles[photo.path.localizedLowercase]
             dropboxFiles.removeValue(forKey: photo.path.localizedLowercase)
 

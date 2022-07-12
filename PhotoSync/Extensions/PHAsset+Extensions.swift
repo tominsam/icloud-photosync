@@ -154,16 +154,10 @@ extension PHAsset {
     static var allAssets: [PHAsset] {
         get async {
             return await withCheckedContinuation { continuation in
-                let allPhotosOptions = PHFetchOptions()
-                allPhotosOptions.includeHiddenAssets = false
-                allPhotosOptions.wantsIncrementalChangeDetails = false
-                allPhotosOptions.sortDescriptors = [
-                    NSSortDescriptor(key: "creationDate", ascending: false),
-                ]
-
-                // This blocks very briefly - 0.2 seconds on my physical
-                // device for 70k photos - so I'm not super bothered right now.
                 let start = Date()
+
+                let allPhotosOptions = PHFetchOptions()
+                allPhotosOptions.wantsIncrementalChangeDetails = false
                 let assets = PHAsset.fetchAssets(with: allPhotosOptions)
                 var allAssets = [PHAsset]()
                 assets.enumerateObjects { asset, _, _ in
@@ -178,8 +172,8 @@ extension PHAsset {
                     return lhs.localIdentifier < rhs.localIdentifier
                 }
 
-                continuation.resume(returning: allAssets)
                 NSLog("%@", "PhotoKit call took \((-start.timeIntervalSinceNow).formatted()) seconds to read \(allAssets.count) photos")
+                continuation.resume(returning: allAssets)
             }
         }
     }

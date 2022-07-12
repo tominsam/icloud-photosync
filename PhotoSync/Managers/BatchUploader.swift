@@ -123,7 +123,7 @@ class BatchUploader: LoggingOperation {
 
             // Store the content hash on the database object before we start the upload
             let context = persistentContainer.newBackgroundContext()
-            if let photo = try await Photo.forAsset(asset, in: context) {
+            if let photo = try await Photo.forLocalIdentifier(asset.localIdentifier, in: context) {
                 photo.contentHash = data.hash
                 try await context.performSave()
             }

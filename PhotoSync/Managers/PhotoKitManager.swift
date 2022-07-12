@@ -56,22 +56,24 @@ class PhotoKitManager: Manager {
         await setTotal(allAssets.count)
 
         for chunk in allAssets.chunked(into: fetchSize) {
-            await addProgress(fetchSize)
             try await Photo.insertOrUpdate(chunk, into: context)
             try await context.performSave(andReset: true)
+            await addProgress(chunk.count)
         }
 
-        // If the user deletes one of of a pair of files with the same name,
-        // I want to restore the original name to whichever is left - that means
-        // that the path generation code needs to be safe, and return the same
-        // result when called repeatedly on the same data set, but also generate
-        // new data when called on a new dataset. (And be consistent cross-platform)
-        // That's done by having every Photo have a cached "this is the path that
-        // I want" that is expensive to calculate, then on parse we loop through
-        // the photos in a _consistent order_ and generate the actual output paths.
-        // This should be deterministic when you leave both files in place.
-        NSLog("%@", "Calculating unique filenames")
-        try await Photo.generateUniqueFilenames(in: context)
+        let deleteMe: Set<String> = Set(
+            // Everything in the database
+            try await Photo.matching(nil, in: context).map { $0.photoKitId }
+        ).subtracting(
+            // minus everything in photokit
+            allAssets.map { $0.localIdentifier }
+        )
+        for localIdentifier in deleteMe {
+            if let photo = try await Photo.forLocalIdentifier(localIdentifier, in: context) {
+                context.delete(photo)
+            }
+        }
+        try await context.performSave(andReset: true)
 
         let duration = Double(DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds) / 1_000_000_000
         NSLog("Synced %d photos in %0.1f seconds (%.0f per second)", allAssets.count, duration, Double(allAssets.count) / duration)
