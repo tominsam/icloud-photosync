@@ -125,7 +125,7 @@ class StatusViewController: UIViewController {
                     dropboxStatusLabel.text = "Failed (\(serviceState.errors.count) errors)"
                 }
             } else {
-                dropboxStatusLabel.text = "Checking \(serviceState.progress) / \(serviceState.total)"
+                dropboxStatusLabel.text = "Fetching \(serviceState.progress) / \(serviceState.total)"
             }
         }
 

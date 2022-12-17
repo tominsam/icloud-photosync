@@ -28,6 +28,8 @@ class SyncManager {
     static let KeychainDropboxAccessToken = "KeychainDropboxAccessToken"
     private let keychain = KeychainSwift()
 
+    static let tempDir = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true).appendingPathComponent("PhotoSync", conformingTo: .folder)
+
     let persistentContainer: NSPersistentContainer
 
     var syncing: Bool = false
@@ -63,10 +65,11 @@ class SyncManager {
         syncing = true
 
         // Clear out anything we left in temp from the last run
-        if let tempFiles = try? FileManager.default.contentsOfDirectory(atPath: NSTemporaryDirectory()) {
+        try? FileManager.default.createDirectory(at: SyncManager.tempDir, withIntermediateDirectories: true)
+        if let tempFiles = try? FileManager.default.contentsOfDirectory(at: SyncManager.tempDir, includingPropertiesForKeys: nil) {
             for file in tempFiles {
                 do {
-                    try FileManager.default.removeItem(atPath: NSTemporaryDirectory() + "/" + file)
+                    try FileManager.default.removeItem(at: file)
                 } catch {
                     NSLog("%@", "Failed to delete temp file! \(error)")
                 }

@@ -43,7 +43,6 @@ public extension SyncToken {
 
     @discardableResult
     private static func insertOrUpdate(type: SyncTokenType, value: Data, into context: NSManagedObjectContext) async throws -> SyncToken {
-        NSLog("%@", "Updating value of \(type)")
         let existing = try await SyncToken.matching("type == %@", args: [type.rawValue], in: context).first
         if let existing = existing {
             existing.value = value

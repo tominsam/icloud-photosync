@@ -12,9 +12,6 @@ packages:
   CollectionConcurrencyKit:
     url: https://github.com/JohnSundell/CollectionConcurrencyKit.git
     revision: b4f23e24b5a1bff301efc5e70871083ca029ff95
-  AsyncAlgorithms:
-    url: https://github.com/apple/swift-async-algorithms
-    from: 0.0.3
 
 targets:
   PhotoSync:
@@ -28,6 +25,7 @@ targets:
         TARGETED_DEVICE_FAMILY: 1 # iphone only
         PRODUCT_BUNDLE_IDENTIFIER: org.movieos.photosync
         DEVELOPMENT_TEAM: 76AFK3W7M9
+        SUPPORTS_MACCATALYST: YES
       debug:
       release:
     sources:
@@ -47,7 +45,6 @@ targets:
       - package: SwiftyDropbox
       - package: KeychainSwift
       - package: CollectionConcurrencyKit
-      - package: AsyncAlgorithms
     info:
       path: Info.plist
       properties:
@@ -70,6 +67,10 @@ targets:
           - CFBundleURLName: ""
             CFBundleURLSchemes:
               - db-ru820t3myp7s6vk
+    entitlements:
+      path: PhotoSync.entitlements
+      properties:
+        keychain-access-groups: []
     postCompileScripts:
       - script: /opt/homebrew/bin/swiftlint
         name: Run SwiftLint

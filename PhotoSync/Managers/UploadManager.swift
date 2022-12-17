@@ -6,7 +6,6 @@ import Foundation
 import Photos
 import SwiftyDropbox
 import UIKit
-import AsyncAlgorithms
 
 class UploadManager: Manager {
 
@@ -17,11 +16,12 @@ class UploadManager: Manager {
 
         let (changes, deletions) = try await iterateAllPhotos(inContext: context, allAssets: allAssets)
 
-        let uploads = changes.filter { $0.isNewFile }
-        let replacements = changes.filter { !$0.isNewFile }
+        let uploads = changes.filter { $0.state == .new }
+        let replacements = changes.filter { $0.state == .replacement }
+        let unknown = changes.filter { $0.state == .unknown }
 
-        NSLog("%@", "Accumulated \(uploads.count) uploads, \(replacements.count) replacements, and \(deletions.count) deletions")
-        await setTotal(uploads.count + replacements.count + deletions.count)
+        NSLog("%@", "Accumulated \(uploads.count) uploads, \(replacements.count) replacements, \(unknown.count) unknown, and \(deletions.count) deletions")
+        await setTotal(uploads.count + replacements.count + unknown.count + deletions.count)
 
         // prioritize new files
         await uploads.chunked(into: 10).parallelMap(maxJobs: 3) { chunk in
@@ -35,7 +35,12 @@ class UploadManager: Manager {
             await self.addProgress(chunk.count)
         }
 
-        // then delete removed files
+        await unknown.chunked(into: 10).parallelMap(maxJobs: 3) { chunk in
+            await self.upload(chunk)
+            await self.addProgress(chunk.count)
+        }
+
+        // then delete removed files (going faster than this throws rate limit errors for me)
         await deletions.chunked(into: 20).parallelMap(maxJobs: 4) { chunk in
             await self.delete(chunk)
             await self.addProgress(chunk.count)
@@ -80,9 +85,20 @@ class UploadManager: Manager {
             let file = dropboxFiles[photo.path.localizedLowercase]
             dropboxFiles.removeValue(forKey: photo.path.localizedLowercase)
 
-            if file == nil || photo.contentHash != file?.contentHash {
-                uploads.append(BatchUploader.UploadTask(asset: asset, filename: photo.path, existingContentHash: file?.contentHash, isNewFile: file == nil))
+            if file != nil && photo.contentHash == file?.contentHash {
+                // file is unchanged, we're fine
+                continue
             }
+
+            let state: BatchUploader.UploadState
+            if file == nil {
+                state = .new
+            } else if photo.contentHash == nil {
+                state = .unknown
+            } else {
+                state = .replacement
+            }
+            uploads.append(BatchUploader.UploadTask(asset: asset, filename: photo.path, existingContentHash: file?.contentHash, state: state))
         }
 
         // Anything left in the dropbox files list needs to be deleted,

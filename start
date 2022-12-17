@@ -1,4 +1,5 @@
 #!/bin/bash -ex
+cd "$(dirname "$0")"
 osascript -e 'quit application "Xcode"'
 sleep 2
 xcodegen

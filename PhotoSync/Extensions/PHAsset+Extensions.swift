@@ -54,17 +54,17 @@ extension PHAsset {
         return dateFormatter
     }()
 
+    var timezone: TimeZone? {
+        guard let location else { return nil }
+        return TimezoneMapper.latLngToTimezone(location.coordinate)
+    }
+
     // slightly slow
     func dropboxPath(fromFilename filename: String) -> String {
         let datePath: String
         if let creationDate = creationDate {
             // Can we get a timezone from the photo location? Assume the photo was taken in that TZ
-            if let location = location, let timezone = TimezoneMapper.latLngToTimezone(location.coordinate) {
-                Self.dateFormatter.timeZone = timezone
-            } else {
-                // Otherwise we'll just have to assume UTC for safety
-                Self.dateFormatter.timeZone = TimeZone(identifier: "UTC")
-            }
+            Self.dateFormatter.timeZone = self.timezone ?? TimeZone(identifier: "UTC")!
             datePath = Self.dateFormatter.string(from: creationDate)
         } else {
             // no creation date?
@@ -92,6 +92,7 @@ extension PHAsset {
             options.deliveryMode = .highQualityFormat
             options.version = .current // save out edited versions (or original if no edits)
             options.isNetworkAccessAllowed = true // download if required
+            options.isSynchronous = true // stay on thread for async simplicity
             return try await withCheckedThrowingContinuation { continuation in
                 manager.requestImageDataAndOrientation(for: self, options: options) { data, _, _, info in
                     guard let data = data else {
@@ -100,7 +101,8 @@ extension PHAsset {
                         continuation.resume(throwing: AssetError.fetch("Can't fetch photo", error))
                         return
                     }
-                    continuation.resume(returning: .data(data, hash: data.dropboxContentHash()))
+                    let dataWithExif = Self.setDate(onImage: data, date: self.creationDate, timezone: self.timezone)
+                    continuation.resume(returning: .data(dataWithExif, hash: dataWithExif.dropboxContentHash()))
                 }
             }
 
@@ -120,8 +122,7 @@ extension PHAsset {
                             return
                         }
                         let filename = UUID().uuidString + ".mov"
-                        let tempDir = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
-                        let tempFile = tempDir.appendingPathComponent(filename, isDirectory: false)
+                        let tempFile = SyncManager.tempDir.appendingPathComponent(filename, isDirectory: false)
                         export.outputURL = tempFile
                         export.outputFileType = .mov
                         export.shouldOptimizeForNetworkUse = true
@@ -149,6 +150,58 @@ extension PHAsset {
         default:
             throw AssetError.mediaType(mediaType)
         }
+    }
+
+    static func setDate(onImage data: Data, date: Date?, timezone: TimeZone?) -> Data {
+        guard let date else { return data }
+
+        // If an image date has been edited in iPhoto, we're going to write the image
+        // in a folder with that edited date, and with an mtime of that edited date, but
+        // it _also_ needs the edited date in the EXIF so that things that import it
+        // (and the dropbox photos view) understand that it's at the time we claim it's
+        // at. The "edited image" export from photokit has the original EXIF, without
+        // the new date, so we need to fix that.
+
+        // Read image
+        let imageRef: CGImageSource = CGImageSourceCreateWithData((data as CFData), nil)!
+
+        // Read exif, extract existing timezone offset from image
+        let oldProperties = CGImageSourceCopyPropertiesAtIndex(imageRef, 0, nil) as? [String: AnyObject]
+        let oldExif = oldProperties?[kCGImagePropertyExifDictionary as String] as? [String: AnyObject]
+        let oldOffset = oldExif?["OffsetTimeOriginal"] as? String
+        let oldTimezone = oldOffset != nil ? TimeZone(fromOffset: oldOffset!) : nil
+
+        let dateFormatter = DateFormatter()
+        // yes, colons. EXIF gonna EXIF.
+        dateFormatter.dateFormat = "yyyy:MM:dd HH:mm:ss"
+        // Guess timezone from GPS first, fall back to respecting any existing timezone on the image
+        dateFormatter.timeZone = timezone ?? oldTimezone
+        let dateString = dateFormatter.string(from: date)
+
+        // There's an unofficial place to put offset in EXIF, let's do that
+        dateFormatter.dateFormat = "xxxxx" // -07:00
+        let offsetString = dateFormatter.string(from: date)
+
+        // Build new exif properties for image
+        let exifDictionary: [NSString: AnyObject] = [
+            "DateTimeOriginal": dateString as CFString,
+            "SubSecDateTimeOriginal": kCFNull,
+            "OffsetTimeOriginal": offsetString as CFString,
+        ]
+        let properties: [NSString: AnyObject] = [
+            kCGImagePropertyExifDictionary: exifDictionary as CFDictionary
+        ]
+
+        // Write out a new data object with updated exif
+        let uti: CFString = CGImageSourceGetType(imageRef)!
+        let dataWithEXIF: NSMutableData = NSMutableData(data: data)
+        guard let destination: CGImageDestination = CGImageDestinationCreateWithData((dataWithEXIF as CFMutableData), uti, 1, nil) else {
+               NSLog("!! Failed to write exif to data")
+            return data
+        }
+        CGImageDestinationAddImageFromSource(destination, imageRef, 0, (properties as CFDictionary))
+        CGImageDestinationFinalize(destination)
+        return dataWithEXIF as Data
     }
 
     static var allAssets: [PHAsset] {

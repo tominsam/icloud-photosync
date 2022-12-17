@@ -1,14 +1,21 @@
 /** The provided code is written by Tim Cooper:   tim@edval.com.au
  * and Andrew Kirmse: akirmse@gmail.com
 This code is available under the MIT licence:  https://opensource.org/licenses/MIT  */
+
+
 import CoreLocation
 @objc open class TimezoneMapper : NSObject /*so you can use it from ObjectiveC*/ {
 
+    // I'm too tired to do this properly. We want to sync init across threads
+    // so it's only created once.
+    static let runOnce: Bool = {
+        TimezoneMapper.initPolyArray()
+        return true
+    }()
+
     @objc public static func latLngToTimezoneString(_ location: CLLocationCoordinate2D) -> String
     {
-        if poly.isEmpty {
-            TimezoneMapper.initPolyArray()
-        }
+        _ = runOnce
         let tzId = timezoneStrings[getTzInt(lat: Float(location.latitude), lng: Float(location.longitude))]
         return tzId
     }

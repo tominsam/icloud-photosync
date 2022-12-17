@@ -5,7 +5,6 @@ import CoreData
 import Photos
 import SwiftyDropbox
 import UIKit
-import AsyncAlgorithms
 
 enum UploadError: Error {
     case photoKit(String)
@@ -16,11 +15,19 @@ enum UploadError: Error {
 // even though it's much more complicated, because Dropbox has internal transaction / locking that effectively
 // prevent me uploading more than one file at once.
 class BatchUploader: LoggingOperation {
+    enum UploadState {
+        // File is not in dropbox
+        case new
+        // File is in dropbox, local hash is different
+        case replacement
+        // File is in dropbox, local hash is nil
+        case unknown
+    }
     public struct UploadTask {
         let asset: PHAsset
         let filename: String
         let existingContentHash: String?
-        let isNewFile: Bool
+        let state: UploadState
     }
 
     private enum UploadResult {
@@ -36,7 +43,7 @@ class BatchUploader: LoggingOperation {
     }
 
     public static func batchUpload(persistentContainer: NSPersistentContainer, dropboxClient: DropboxClient, tasks: [UploadTask]) async -> [FinishResult] {
-        NSLog("%@", "Downloading chunk of \(tasks.count) files")
+        NSLog("%@", "Fetching chunk of \(tasks.count) files")
 
         // Download all the images, one at a time, in advance.
         let data = await tasks.asyncMap { await download(persistentContainer: persistentContainer, asset: $0.asset) }
@@ -119,6 +126,7 @@ class BatchUploader: LoggingOperation {
     private static func download(persistentContainer: NSPersistentContainer, asset: PHAsset) async -> AssetData {
         // Get photo from photoKit. This is slow.
         do {
+            // this is the _final_ image data, including patched exif for edited files and videos
             let data = try await asset.getImageData()
 
             // Store the content hash on the database object before we start the upload
