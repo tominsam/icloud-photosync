@@ -98,7 +98,7 @@ class UploadManager: Manager {
             } else {
                 state = .replacement
             }
-            uploads.append(BatchUploader.UploadTask(asset: asset, filename: photo.path, existingContentHash: file?.contentHash, state: state))
+            uploads.append(BatchUploader.UploadTask(asset: asset, filename: photo.path, existingContentHash: file?.contentHash, cloudIdentifier: photo.cloudIdentifier, state: state))
         }
 
         // Anything left in the dropbox files list needs to be deleted,

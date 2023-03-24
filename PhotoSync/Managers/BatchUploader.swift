@@ -27,6 +27,7 @@ class BatchUploader: LoggingOperation {
         let asset: PHAsset
         let filename: String
         let existingContentHash: String?
+        let cloudIdentifier: String
         let state: UploadState
     }
 
@@ -68,6 +69,7 @@ class BatchUploader: LoggingOperation {
                                 filename: task.filename,
                                 date: task.asset.creationDate ?? task.asset.modificationDate,
                                 contentHash: hash,
+                                cloudIdentifier: task.cloudIdentifier,
                                 data: data)
                         case .url(let url, let hash), .tempUrl(let url, let hash):
                             uploadSession = try await uploadUrl(
@@ -75,6 +77,7 @@ class BatchUploader: LoggingOperation {
                                 filename: task.filename,
                                 date: task.asset.creationDate ?? task.asset.modificationDate,
                                 contentHash: hash,
+                                cloudIdentifier: task.cloudIdentifier,
                                 url: url)
                         case .failure(let error):
                             throw error
@@ -142,7 +145,7 @@ class BatchUploader: LoggingOperation {
         }
     }
 
-    private static func uploadData(dropboxClient: DropboxClient, filename: String, date: Date?, contentHash: String, data: Data) async throws -> Files.UploadSessionFinishArg {
+    private static func uploadData(dropboxClient: DropboxClient, filename: String, date: Date?, contentHash: String, cloudIdentifier: String, data: Data) async throws -> Files.UploadSessionFinishArg {
         // Theoretically if data is >150mb we have a problem here, but that seems unlikely
         // for most use cases right now. (hahahaha yes I know)
         let length = data.count
@@ -160,11 +163,12 @@ class BatchUploader: LoggingOperation {
             mode: .overwrite,
             autorename: false,
             clientModified: date
+            //propertyGroups: [.init(templateId: "foo", fields: [.init(name: "cloudIdentifier", value: cloudIdentifier)])]
         )
         return Files.UploadSessionFinishArg(cursor: cursor, commit: commitInfo)
     }
 
-    private static func uploadUrl(dropboxClient: DropboxClient, filename: String, date: Date?, contentHash: String, url: URL) async throws -> Files.UploadSessionFinishArg {
+    private static func uploadUrl(dropboxClient: DropboxClient, filename: String, date: Date?, contentHash: String, cloudIdentifier: String, url: URL) async throws -> Files.UploadSessionFinishArg {
         // We need to close the last chunk - we'll track that by fetching
         // the total file size and checking the total uploaded bytes against it.
         let resources = try url.resourceValues(forKeys: [.fileSizeKey])
@@ -211,6 +215,7 @@ class BatchUploader: LoggingOperation {
             mode: .overwrite,
             autorename: false,
             clientModified: date
+            //propertyGroups: [.init(templateId: "foo", fields: [.init(name: "cloudIdentifier", value: cloudIdentifier)])]
         )
         return Files.UploadSessionFinishArg(cursor: cursor, commit: commitInfo, contentHash: contentHash)
     }

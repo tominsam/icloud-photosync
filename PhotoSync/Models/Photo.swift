@@ -13,6 +13,7 @@ public class Photo: NSManagedObject, ManagedObject {
 
     // Properties from photokit
     @NSManaged public var photoKitId: String!
+    @NSManaged public var cloudIdentifier: String!
     @NSManaged public var created: Date?
     @NSManaged public var modified: Date?
 
@@ -35,10 +36,17 @@ public extension Photo {
     @discardableResult
     static func insertOrUpdate(_ assets: [PHAsset], into context: NSManagedObjectContext) async throws -> [Photo] {
         guard !assets.isEmpty else { return [] }
+
+        let cloudIdentifiers = PHPhotoLibrary.shared().cloudIdentifierMappings(forLocalIdentifiers: assets.map { $0.localIdentifier })
+
         let existing = try await Photo.matching("photoKitId IN (%@)", args: [assets.map { $0.localIdentifier }], in: context).uniqueBy(\.photoKitId)
         return assets.map { asset in
             let photo = existing[asset.localIdentifier] ?? context.performAndWait { context.insertObject() }
-            photo.update(from: asset)
+            if case .success(let ci) = cloudIdentifiers[asset.localIdentifier] {
+                photo.update(from: asset, cloudIdentifier: ci)
+            } else {
+                print("no")
+            }
             return photo
         }
     }
@@ -49,6 +57,7 @@ public extension Photo {
 
     struct PhotoMapping {
         let photoKitId: String
+        let cloudIdentifier: String
         let path: String
         let contentHash: String?
     }
@@ -83,13 +92,14 @@ public extension Photo {
                 path = path.incrementFilenameMagicNumber()
             }
             allAssignedPaths.insert(path)
-            return PhotoMapping(photoKitId: photo.photoKitId, path: path, contentHash: photo.contentHash)
+            return PhotoMapping(photoKitId: photo.photoKitId, cloudIdentifier: photo.cloudIdentifier, path: path, contentHash: photo.contentHash)
         }
     }
 
-    private func update(from asset: PHAsset) {
+    private func update(from asset: PHAsset, cloudIdentifier: PHCloudIdentifier) {
         photoKitId = asset.localIdentifier
         created = asset.creationDate
+        self.cloudIdentifier = cloudIdentifier.stringValue
         if modified != asset.modificationDate {
             // if the file has been changed, invalidate the content hash
             // and the path (because you can change the date on photos)
