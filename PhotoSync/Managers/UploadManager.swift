@@ -41,7 +41,7 @@ class UploadManager: Manager {
         }
 
         // then delete removed files (going faster than this throws rate limit errors for me)
-        await deletions.chunked(into: 20).parallelMap(maxJobs: 4) { chunk in
+        await deletions.chunked(into: 40).parallelMap(maxJobs: 8) { chunk in
             await self.delete(chunk)
             await self.addProgress(chunk.count)
         }

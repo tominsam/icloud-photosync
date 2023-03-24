@@ -51,7 +51,7 @@ class DeleteOperation {
         while true {
             NSLog("%@", "Waiting")
             // Wait a random amount before polling again
-            try? await Task.sleep(nanoseconds: 4_000_000 * UInt64.random(in: 1_000..<2_000))
+            try? await Task.sleep(nanoseconds: 6_000_000 * UInt64.random(in: 1_000..<2_000))
             let batch = try await dropboxClient.files.deleteBatchCheck(asyncJobId: jobId).asyncResponse()
             switch batch {
             case .complete:

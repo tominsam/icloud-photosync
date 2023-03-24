@@ -195,6 +195,10 @@ extension PHAsset {
         // Write out a new data object with updated exif
         let uti: CFString = CGImageSourceGetType(imageRef)!
         let dataWithEXIF: NSMutableData = NSMutableData(data: data)
+        if ["org.webmproject.webp"].contains(uti as NSString) {
+            return data
+        }
+
         guard let destination: CGImageDestination = CGImageDestinationCreateWithData((dataWithEXIF as CFMutableData), uti, 1, nil) else {
                NSLog("!! Failed to write exif to data")
             return data
