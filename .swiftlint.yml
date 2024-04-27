@@ -10,6 +10,8 @@ disabled_rules:
   - force_try
   - force_cast
   - function_parameter_count
+  - trailing_whitespace
+  - comment_spacing
 
 excluded:
   - PhotoSync/Utilities/TimezoneMapper.swift

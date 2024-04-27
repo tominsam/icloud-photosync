@@ -36,6 +36,7 @@ struct LeadingTrailingLabel: View {
 
     var body: some View {
         ZStack {
+            // background is a progress bar that fills up behind the label
             GeometryReader { metrics in
                 HStack(spacing: .zero) {
                     Color.green
@@ -45,7 +46,7 @@ struct LeadingTrailingLabel: View {
             }
 
             HStack {
-                Text(leading)
+                Text(leading).fixedSize(horizontal: true, vertical: true)
                 Spacer()
                 Text(trailing)
             }.padding()

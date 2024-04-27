@@ -104,13 +104,13 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     func updateDropboxNavigationItem() {
         let item: UIBarButtonItem
         if syncManager.isLoggedIn {
-            item = UIBarButtonItem(title: "Log out", action: {
+            item = UIBarButtonItem(primaryAction: UIAction(title: "Log out", handler: { _ in
                 DropboxClientsManager.resetClients()
                 self.updateDropboxNavigationItem()
                 self.startDropboxSync()
-            })
+            }))
         } else {
-            item = UIBarButtonItem(title: "Connect to Dropbox", action: {
+            item = UIBarButtonItem(primaryAction: UIAction(title: "Connect to Dropbox", handler: { _ in
                 let scopeRequest = ScopeRequest(
                     scopeType: .user,
                     scopes: ["files.metadata.read", "files.content.write"],
@@ -121,7 +121,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
                     loadingStatusDelegate: nil,
                     openURL: { UIApplication.shared.open($0, options: [:], completionHandler: nil) },
                     scopeRequest: scopeRequest)
-            })
+            }))
         }
 
         navigationController.viewControllers.first?.navigationItem.rightBarButtonItem = item
