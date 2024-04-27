@@ -7,7 +7,8 @@ import Photos
 import SwiftyDropbox
 import UIKit
 
-struct ServiceError {
+struct ServiceError: Identifiable {
+    let id = UUID()
     let path: String
     let message: String
     let error: Error?

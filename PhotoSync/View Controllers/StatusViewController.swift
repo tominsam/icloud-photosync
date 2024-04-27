@@ -7,66 +7,90 @@
 //
 
 import UIKit
+import SwiftUI
 
-class StatusViewController: UIViewController {
-    private var syncManager: SyncManager
+class StatusViewModel: ObservableObject {
+    @Published
+    var photosState: String = ""
+    @Published
+    var photosProgress: Double = 0
 
-    lazy var photoKitStatusTitle = UILabel().configured {
-        $0.text = "Photo Database"
-        $0.font = UIFont.systemFont(ofSize: UIFont.labelFontSize)
-        $0.textColor = .label
+    @Published
+    var dropboxState: String = ""
+    @Published
+    var dropboxProgress: Double = 0
+
+    @Published
+    var uploadState: String = ""
+    @Published
+    var uploadProgress: Double = 0
+
+    @Published
+    var errors: [ServiceError] = []
+}
+
+struct LeadingTrailingLabel: View {
+    let leading: String
+    let trailing: String
+    let progress: Double
+
+    var body: some View {
+        ZStack {
+            GeometryReader { metrics in
+                HStack(spacing: .zero) {
+                    Color.green
+                        .opacity(0.3)
+                        .frame(width: metrics.size.width * progress)
+                }
+            }
+
+            HStack {
+                Text(leading)
+                Spacer()
+                Text(trailing)
+            }.padding()
+        }
     }
 
-    lazy var photoKitStatusLabel = UILabel().configured {
-        $0.font = UIFont.systemFont(ofSize: UIFont.labelFontSize)
-        $0.textColor = .secondaryLabel
-        $0.numberOfLines = 0
-    }
+}
 
-    lazy var dropboxStatusTitle = UILabel().configured {
-        $0.text = "Dropbox"
-        $0.font = UIFont.systemFont(ofSize: UIFont.labelFontSize)
-        $0.textColor = .label
-    }
+struct StatusView: View {
 
-    lazy var dropboxStatusLabel = UILabel().configured {
-        $0.font = UIFont.systemFont(ofSize: UIFont.labelFontSize)
-        $0.textColor = .secondaryLabel
-        $0.numberOfLines = 0
-    }
+    @ObservedObject
+    var viewModel: StatusViewModel
 
-    lazy var syncStatusTitle = UILabel().configured {
-        $0.text = "Upload"
-        $0.font = UIFont.systemFont(ofSize: UIFont.labelFontSize)
-        $0.textColor = .label
-    }
+    var body: some View {
+        VStack {
+            VStack(alignment: .leading) {
+                Text("Sync").font(.title).padding()
+                LeadingTrailingLabel(leading: "Photos database", trailing: viewModel.photosState, progress: viewModel.photosProgress)
+                LeadingTrailingLabel(leading: "Dropbox", trailing: viewModel.dropboxState, progress: viewModel.dropboxProgress)
+                LeadingTrailingLabel(leading: "Upload", trailing: viewModel.uploadState, progress: viewModel.uploadProgress)
 
-    lazy var syncStatusLabel = UILabel().configured {
-        $0.font = UIFont.systemFont(ofSize: UIFont.labelFontSize)
-        $0.textColor = .secondaryLabel
-        $0.numberOfLines = 0
-    }
+                Divider()
+                Text("Errors").font(.title).padding()
 
-    lazy var errorsTitle = UILabel().configured {
-        $0.text = "Errors"
-        $0.font = UIFont.systemFont(ofSize: UIFont.labelFontSize)
-        $0.textColor = .label
-    }
+            }.fixedSize(horizontal: false, vertical: true)
 
-    lazy var errorsView = UITableView(frame: .zero, style: .plain).configured {
-        $0.allowsSelection = false
-        $0.tableFooterView = UIView()
-        $0.dataSource = self
-        $0.delegate = self
-        $0.register(ErrorCell.self, forCellReuseIdentifier: "ErrorCell")
-        $0.estimatedRowHeight = UITableView.automaticDimension
-        $0.separatorStyle = .none
+            Table(viewModel.errors) {
+                TableColumn("Path", value: \.path)
+                TableColumn("Messasge", value: \.message)
+            }.frame(maxHeight: .infinity)
+        }
     }
+}
+
+class StatusViewController: UIHostingController<StatusView>, SyncManagerDelegate {
+
+    var syncManager: SyncManager
+
+    var viewModel = StatusViewModel()
 
     init(syncManager: SyncManager) {
         self.syncManager = syncManager
-        super.init(nibName: nil, bundle: nil)
+        super.init(rootView: StatusView(viewModel: viewModel))
         syncManager.delegate = self
+        render()
     }
 
     @available(*, unavailable)
@@ -74,26 +98,7 @@ class StatusViewController: UIViewController {
         fatalError("init(coder:) has not been implemented")
     }
 
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        view.backgroundColor = .systemBackground
-
-        let stackView = UIStackView(arrangedSubviews: [photoKitStatusTitle, photoKitStatusLabel, dropboxStatusTitle, dropboxStatusLabel, syncStatusTitle, syncStatusLabel, errorsTitle])
-        stackView.axis = .vertical
-        stackView.spacing = 8
-        stackView.setCustomSpacing(24, after: photoKitStatusLabel)
-        stackView.setCustomSpacing(24, after: dropboxStatusLabel)
-        stackView.setCustomSpacing(24, after: syncStatusLabel)
-        stackView.setCustomSpacing(16, after: errorsTitle)
-        stackView.preservesSuperviewLayoutMargins = true
-        stackView.isLayoutMarginsRelativeArrangement = true
-
-        let mainStack = UIStackView(arrangedSubviews: [stackView, errorsView])
-        mainStack.axis = .vertical
-        mainStack.preservesSuperviewLayoutMargins = true
-
-        view.addSubviewWithInsets(mainStack)
-
+    func syncManagerUpdatedState(_ syncManager: SyncManager) {
         render()
     }
 
@@ -101,69 +106,58 @@ class StatusViewController: UIViewController {
         assert(Thread.isMainThread)
         switch syncManager.photoState {
         case .none:
-            photoKitStatusLabel.text = "Not started"
+            viewModel.photosState = "Not started"
         case let .some(serviceState):
             if serviceState.complete {
                 if serviceState.errors.isEmpty {
-                    photoKitStatusLabel.text = "Complete (found \(serviceState.total) photos)"
+                    viewModel.photosState = "Complete (found \(serviceState.total) photos)"
+                    viewModel.photosProgress = 1
                 } else {
-                    photoKitStatusLabel.text = "Failed (\(serviceState.errors.count) errors)"
+                    viewModel.photosState = "Failed (\(serviceState.errors.count) errors)"
+                    viewModel.photosProgress = 0
                 }
             } else {
-                photoKitStatusLabel.text = "Fetching \(serviceState.progress) / \(serviceState.total)"
+                viewModel.photosState = "Fetching \(serviceState.progress) / \(serviceState.total)"
+                viewModel.photosProgress = Double(serviceState.progress) / Double(serviceState.total)
             }
         }
 
         switch syncManager.dropboxState {
         case .none:
-            dropboxStatusLabel.text = "Not started"
+            viewModel.dropboxState = "Not started"
         case let .some(serviceState):
             if serviceState.complete {
                 if serviceState.errors.isEmpty {
-                    dropboxStatusLabel.text = "Complete (found \(serviceState.total) files)"
+                    viewModel.dropboxState = "Complete (found \(serviceState.total) files)"
+                    viewModel.dropboxProgress = 1
                 } else {
-                    dropboxStatusLabel.text = "Failed (\(serviceState.errors.count) errors)"
+                    viewModel.dropboxState = "Failed (\(serviceState.errors.count) errors)"
+                    viewModel.dropboxProgress = 0
                 }
             } else {
-                dropboxStatusLabel.text = "Fetching \(serviceState.progress) / \(serviceState.total)"
+                viewModel.dropboxState = "Fetching \(serviceState.progress) / \(serviceState.total)"
+                viewModel.dropboxProgress = Double(serviceState.progress) / Double(serviceState.total)
             }
         }
 
         switch syncManager.uploadState {
         case .none:
-            syncStatusLabel.text = "Not started"
+            viewModel.uploadState = "Not started"
         case let .some(serviceState):
             if serviceState.complete {
                 if serviceState.errors.isEmpty {
-                    syncStatusLabel.text = "Complete"
+                    viewModel.uploadState = "Complete"
+                    viewModel.uploadProgress = 1
                 } else {
-                    syncStatusLabel.text = "Failed (\(serviceState.errors.count) errors)"
+                    viewModel.uploadState = "Failed (\(serviceState.errors.count) errors)"
+                    viewModel.uploadProgress = 0
                 }
             } else {
-                syncStatusLabel.text = "Uploading \(serviceState.progress) / \(serviceState.total)"
+                viewModel.uploadState = "Uploaded \(serviceState.progress) / \(serviceState.total)"
+                viewModel.uploadProgress = Double(serviceState.progress) / Double(serviceState.total)
             }
         }
 
-        errorsView.reloadData()
-    }
-}
-
-extension StatusViewController: UITableViewDataSource, UITableViewDelegate {
-    func tableView(_: UITableView, numberOfRowsInSection _: Int) -> Int {
-        return syncManager.errors.count
-    }
-
-    func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        let cell = tableView.dequeueReusableCell(withIdentifier: "ErrorCell", for: indexPath)
-        let row = syncManager.errors.count - indexPath.row - 1
-        cell.textLabel?.text = syncManager.errors[row].path
-        cell.detailTextLabel?.text = syncManager.errors[row].message
-        return cell
-    }
-}
-
-extension StatusViewController: SyncManagerDelegate {
-    func syncManagerUpdatedState(_: SyncManager) {
-        render()
+        viewModel.errors = syncManager.errors
     }
 }
