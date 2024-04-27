@@ -9,6 +9,7 @@ disabled_rules:
   - file_length
   - force_try
   - force_cast
+  - function_parameter_count
 
 excluded:
   - PhotoSync/Utilities/TimezoneMapper.swift

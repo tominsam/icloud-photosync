@@ -23,8 +23,8 @@ class ClosureSleeve {
 
 extension NSObject {
     private enum ClosureSleeveKey {
-        static var closureSleeve = "closureSleeve"
-    }
+        static var closureSleeve = true
+    }   
 
     var closureSleeve: ClosureSleeve? {
         get {

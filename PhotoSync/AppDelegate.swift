@@ -57,7 +57,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     func application(_: UIApplication, open url: URL, options _: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
-        return DropboxClientsManager.handleRedirectURL(url) { authResult in
+        return DropboxClientsManager.handleRedirectURL(url, includeBackgroundClient: false) { authResult in
             switch authResult {
             case .success:
                 self.updateDropboxNavigationItem()

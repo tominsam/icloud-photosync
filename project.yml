@@ -5,7 +5,7 @@ options:
 packages:
   SwiftyDropbox:
     url: https://github.com/dropbox/SwiftyDropbox.git
-    revision: 81dee82b5e383afe4c00190efa5c64434ac39b53
+    exactVersion: 10.0.0-beta.3
   KeychainSwift:
     url: https://github.com/evgenyneu/keychain-swift.git
     revision: 32a99b537d1c6f3529a08257c28a5feb70c0c5af
