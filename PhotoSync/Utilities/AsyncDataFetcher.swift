@@ -2,6 +2,8 @@
 
 import Foundation
 
+/// Async iterator that returns the binary contents of a file in chunks of a provided
+/// size, keep looping on it until it's finished and you'll have the whole file.
 class AsyncDataFetcher: AsyncIteratorProtocol {
     typealias Element = Data
 

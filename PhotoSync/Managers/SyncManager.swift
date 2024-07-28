@@ -25,7 +25,7 @@ protocol SyncManagerDelegate: NSObjectProtocol {
     func syncManagerUpdatedState(_ syncManager: SyncManager)
 }
 
-class SyncManager {
+class SyncManager: ObservableObject {
     static let KeychainDropboxAccessToken = "KeychainDropboxAccessToken"
     private let keychain = KeychainSwift()
 
@@ -33,18 +33,23 @@ class SyncManager {
 
     let persistentContainer: NSPersistentContainer
 
+    @Published
+    var isLoggedIn: Bool = false
+    @Published
     var syncing: Bool = false
-    var photoState: ServiceState?
-    var dropboxState: ServiceState?
-    var uploadState: ServiceState?
+    @Published
+    var photoState: ServiceState = .init()
+    @Published
+    var dropboxState: ServiceState = .init()
+    @Published
+    var uploadState: ServiceState = .init()
 
     var errors: [ServiceError] {
-        return (photoState?.errors ?? []) + (dropboxState?.errors ?? []) + (uploadState?.errors ?? [])
+        return photoState.errors + dropboxState.errors + uploadState.errors
     }
 
     public weak var delegate: SyncManagerDelegate?
 
-    public var isLoggedIn: Bool { return dropboxClient != nil }
     private var dropboxClient: DropboxClient? { DropboxClientsManager.authorizedClient }
 
     init(persistentContainer: NSPersistentContainer) {
@@ -52,6 +57,7 @@ class SyncManager {
     }
 
     func maybeSync() {
+        isLoggedIn = dropboxClient != nil
         guard !syncing else { return }
         guard isLoggedIn else { return }
         guard PhotoKitManager.hasPermission else { return }
@@ -107,7 +113,7 @@ class SyncManager {
             } catch {
                 fatalError(error.localizedDescription)
             }
-            if dropboxState?.errors.isEmpty != true && photoState?.errors.isEmpty != true {
+            if !dropboxState.errors.isEmpty || !photoState.errors.isEmpty {
                 NSLog("There are errors in initial sync!")
                 return
             }

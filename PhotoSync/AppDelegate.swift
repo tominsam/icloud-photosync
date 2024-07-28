@@ -48,9 +48,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         DropboxClientsManager.setupWithAppKey("ru820t3myp7s6vk")
         window!.rootViewController = navigationController
         window!.makeKeyAndVisible()
-        navigationController.viewControllers = [StatusViewController(syncManager: syncManager)]
-        // navigationController.viewControllers = [PhotosViewController()]
-        updateDropboxNavigationItem()
+        navigationController.viewControllers = [
+            StatusViewController(syncManager: syncManager)
+        ]
         startDropboxSync()
         startPhotoSync()
         return true
@@ -60,7 +60,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         return DropboxClientsManager.handleRedirectURL(url, includeBackgroundClient: false) { authResult in
             switch authResult {
             case .success:
-                self.updateDropboxNavigationItem()
                 self.syncManager.maybeSync()
             case .cancel:
                 break
@@ -91,7 +90,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             syncManager.maybeSync()
         default:
             // TODO: open settings or something, don't use alert here, etc.
-            let alert = UIAlertController.simpleAlert(title: "Error", message: "Photo permission", action: "OK") { _ in
+            let alert = UIAlertController.simpleAlert(title: "Error", message: "Photo permission not granted", action: "OK") { _ in
             }
             navigationController.present(alert, animated: true, completion: nil)
         }
@@ -101,29 +100,4 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         syncManager.maybeSync()
     }
 
-    func updateDropboxNavigationItem() {
-        let item: UIBarButtonItem
-        if syncManager.isLoggedIn {
-            item = UIBarButtonItem(primaryAction: UIAction(title: "Log out", handler: { _ in
-                DropboxClientsManager.resetClients()
-                self.updateDropboxNavigationItem()
-                self.startDropboxSync()
-            }))
-        } else {
-            item = UIBarButtonItem(primaryAction: UIAction(title: "Connect to Dropbox", handler: { _ in
-                let scopeRequest = ScopeRequest(
-                    scopeType: .user,
-                    scopes: ["files.metadata.read", "files.content.write"],
-                    includeGrantedScopes: false)
-                DropboxClientsManager.authorizeFromControllerV2(
-                    UIApplication.shared,
-                    controller: self.navigationController,
-                    loadingStatusDelegate: nil,
-                    openURL: { UIApplication.shared.open($0, options: [:], completionHandler: nil) },
-                    scopeRequest: scopeRequest)
-            }))
-        }
-
-        navigationController.viewControllers.first?.navigationItem.rightBarButtonItem = item
-    }
 }

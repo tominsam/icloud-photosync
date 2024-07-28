@@ -93,7 +93,8 @@ extension PHAsset {
             options.version = .current // save out edited versions (or original if no edits)
             options.isNetworkAccessAllowed = true // download if required
             options.isSynchronous = true // stay on thread for async simplicity
-            return try await withCheckedThrowingContinuation { continuation in
+
+            let data: Data = try await withCheckedThrowingContinuation { continuation in
                 manager.requestImageDataAndOrientation(for: self, options: options) { data, _, _, info in
                     guard let data = data else {
                         let error = info?[PHImageErrorKey] as? Error
@@ -101,58 +102,40 @@ extension PHAsset {
                         continuation.resume(throwing: AssetError.fetch("Can't fetch photo", error))
                         return
                     }
-                    let dataWithExif = Self.setDate(onImage: data, date: self.creationDate, timezone: self.timezone)
-                    continuation.resume(returning: .data(dataWithExif, hash: dataWithExif.dropboxContentHash()))
+                    continuation.resume(returning: data)
                 }
             }
+            let dataWithExif = await Self.setDate(onImage: data, date: self.creationDate, timezone: self.timezone)
+            return .data(dataWithExif, hash: dataWithExif.dropboxContentHash())
 
         case .video:
-            let options = PHVideoRequestOptions()
-            options.deliveryMode = .highQualityFormat
-            options.version = .current // save out edited versions (or original if no edits)
-            options.isNetworkAccessAllowed = true // download if required
-            return try await withCheckedThrowingContinuation { continuation in
-                manager.requestAVAsset(forVideo: self, options: options) { avAsset, _, info in
-                    if let composition = avAsset as? AVComposition {
-                        NSLog("%@", "Exporting compositional video")
-                        // Slo-mo video - https://buffer.com/resources/slow-motion-video-ios/
-                        // TODO this generates inconsistent content hashes per-platform.
-                        guard let export = AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetHighestQuality) else {
-                            continuation.resume(throwing: AssetError.fetch("Can't start export session", nil))
-                            return
-                        }
-                        let filename = UUID().uuidString + ".mov"
-                        let tempFile = SyncManager.tempDir.appendingPathComponent(filename, isDirectory: false)
-                        export.outputURL = tempFile
-                        export.outputFileType = .mov
-                        export.shouldOptimizeForNetworkUse = true
-                        export.exportAsynchronously {
-                            NSLog("%@", "Export complete: \(export.status) to \(tempFile)")
-                            if export.status == .completed {
-                                continuation.resume(returning: .tempUrl(tempFile, hash: tempFile.dropboxContentHash()))
-                            } else {
-                                continuation.resume(throwing: AssetError.fetch("Can't export video", nil))
-                            }
-                        }
 
-                    } else if let avUrlAsset = avAsset as? AVURLAsset {
-                        NSLog("%@", "Video downloaded as \(avUrlAsset.url)")
-                        continuation.resume(returning: .url(avUrlAsset.url, hash: avUrlAsset.url.dropboxContentHash()))
+            let avAsset = try await manager.getAVAsset(for: self)
+            NSLog("%@", "Video downloaded as \(avAsset.description)")
 
-                    } else {
-                        let error = info?[PHImageErrorKey] as? Error
-                        NSLog("Photo fetch failed: %@", error.map { String(describing: $0) } ?? "")
-                        continuation.resume(throwing: AssetError.fetch("Can't fetch video", error))
-                    }
-                }
+//            if let composition = avAsset as? AVComposition {
+//                if let url = try await Self.exportSlowmo(composition: composition, date: creationDate) {
+//                    return .tempUrl(url, hash: url.dropboxContentHash())
+//                } else {
+//                    throw AssetError.fetch("Can't export slomo video", nil)
+//                }
+//            }
+            if let avUrlAsset = avAsset as? AVURLAsset {
+                return .url(avUrlAsset.url, hash: avUrlAsset.url.dropboxContentHash())
+                //                if let url = try await Self.setDate(onAsset: avUrlAsset, date: self.creationDate, timezone: self.timezone) {
+                //                    return .tempUrl(url, hash: url.dropboxContentHash())
+                //                } else {
+                //                    return .url(avUrlAsset.url, hash: avUrlAsset.url.dropboxContentHash())
+                //                }
             }
+                throw AssetError.fetch("Unknown asset type \(type(of: avAsset))", nil)
 
         default:
             throw AssetError.mediaType(mediaType)
         }
     }
 
-    static func setDate(onImage data: Data, date: Date?, timezone: TimeZone?) -> Data {
+    static func setDate(onImage data: Data, date: Date?, timezone: TimeZone?) async -> Data {
         guard let date else { return data }
 
         // If an image date has been edited in iPhoto, we're going to write the image
@@ -200,12 +183,111 @@ extension PHAsset {
         }
 
         guard let destination: CGImageDestination = CGImageDestinationCreateWithData((dataWithEXIF as CFMutableData), uti, 1, nil) else {
-               NSLog("!! Failed to write exif to data")
+            NSLog("!! Failed to write exif to data")
             return data
         }
         CGImageDestinationAddImageFromSource(destination, imageRef, 0, (properties as CFDictionary))
         CGImageDestinationFinalize(destination)
         return dataWithEXIF as Data
+    }
+
+    static func exportSlowmo(composition: AVComposition, date: Date?) async throws -> URL? {
+        NSLog("%@", "Exporting compositional video")
+        // Slo-mo video - https://buffer.com/resources/slow-motion-video-ios/
+        // TODO this generates inconsistent content hashes per-platform.
+        guard let export = AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetHighestQuality) else {
+            throw AssetError.fetch("Can't start export session", nil)
+        }
+        let filename = UUID().uuidString + ".m4v"
+        let tempFile = SyncManager.tempDir.appendingPathComponent(filename, isDirectory: false)
+        export.outputURL = tempFile
+        export.outputFileType = .m4v
+        export.shouldOptimizeForNetworkUse = true
+        export.metadata = Self.dateMetadata(for: date)
+
+        await export.export()
+        switch export.status {
+        case .completed:
+            return tempFile
+        default:
+            throw AssetError.fetch("Can't export video", nil)
+        }
+    }
+
+    static func setDate(onAsset asset: AVURLAsset, date: Date?, timezone: TimeZone?) async throws -> URL? {
+        guard let date else { return nil }
+
+        for format in try await asset.load(.availableMetadataFormats) {
+            let metadata = try await asset.loadMetadata(for: format)
+            NSLog("metadata for \(asset.url)")
+            for m in metadata {
+                print("***\(String(describing: m.keySpace)) \(String(describing: m.key)) \(String(describing: try await m.load(.value)))")
+            }
+        }
+
+        for m in try await asset.load(.commonMetadata) {
+            print("*** -> \(String(describing: m.keySpace)) \(String(describing: m.key)) \(String(describing: try await m.load(.value)))")
+            print(String(describing: m))
+        }
+
+        let tempFile = SyncManager.tempDir.appendingPathComponent(asset.url.lastPathComponent, isDirectory: false)
+        guard let export = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetPassthrough) else {
+            throw AssetError.fetch("Can't start export session", nil)
+        }
+
+        print("*** -- track ")
+        for m in try await asset.load(.tracks).first?.load(.metadata) ?? [] {
+            print("*** -> \(String(describing: m.keySpace)) \(String(describing: m.key)) \(String(describing: try await m.load(.value)))")
+            print(String(describing: m))
+        }
+
+        export.outputURL = tempFile
+        export.outputFileType = .mov
+        export.shouldOptimizeForNetworkUse = true
+        export.metadata = Self.dateMetadata(for: date)
+        await export.export()
+        switch export.status {
+        case .completed:
+            NSLog("*** output \(tempFile)")
+            return tempFile
+        default:
+            NSLog("Failed to set date: \(String(describing: export.error))")
+            return nil
+        }
+    }
+
+    static func dateMetadata(for date: Date?) -> [AVMetadataItem]? {
+        guard let date else { return nil }
+        let dates = [
+            (AVMetadataKeySpace.common, AVMetadataKey.commonKeyCreationDate),
+            (.common, .commonKeyLastModifiedDate),
+            (.quickTimeMetadata, .quickTimeMetadataKeyCreationDate),
+            (.quickTimeUserData, .quickTimeUserDataKeyCreationDate),
+            (.isoUserData, .isoUserDataKeyDate),
+            (.id3, .id3MetadataKeyDate),
+        ].map { keySpace, key in
+            let dateMetadata = AVMutableMetadataItem()
+            dateMetadata.keySpace = keySpace
+            dateMetadata.key = key as NSString
+            dateMetadata.dataType = kCMMetadataBaseDataType_UTF8 as String
+            dateMetadata.value = "1970-02-01T10:59:43-0800" as NSString // Date(timeIntervalSince1970: 1000) as NSDate?
+            assert(dateMetadata.dateValue != nil)
+            return dateMetadata
+        }
+
+        let moreDates = [
+            AVMetadataIdentifier.commonIdentifierCreationDate,
+            .quickTimeMetadataCreationDate
+        ].map { identifier in
+            let dateMetadata = AVMutableMetadataItem()
+            dateMetadata.identifier = identifier
+            dateMetadata.dataType = kCMMetadataBaseDataType_UTF8 as String
+            dateMetadata.value = "1970-02-01T10:59:43-0800" as NSString // Date(timeIntervalSince1970: 1000) as NSDate?
+            assert(dateMetadata.dateValue != nil)
+            return dateMetadata
+        }
+
+        return dates + moreDates
     }
 
     static var allAssets: [PHAsset] {
@@ -230,7 +312,31 @@ extension PHAsset {
                 }
 
                 NSLog("%@", "PhotoKit call took \((-start.timeIntervalSinceNow).formatted()) seconds to read \(allAssets.count) photos")
+                assert(allAssets.count > 0)
                 continuation.resume(returning: allAssets)
+            }
+        }
+    }
+}
+
+extension PHImageManager {
+    func getAVAsset(for asset: PHAsset) async throws -> AVAsset {
+        return try await withCheckedThrowingContinuation { continuation in
+            let options = PHVideoRequestOptions()
+            options.deliveryMode = .highQualityFormat
+            //options.version = .current // save out edited versions (or original if no edits)
+            options.version = .original
+            options.isNetworkAccessAllowed = true // download if required
+            requestAVAsset(forVideo: asset, options: options) { avAsset, _, info in
+                if let error = info?[PHImageErrorKey] as? Error {
+                    continuation.resume(throwing: AssetError.fetch("Can't fetch", error))
+                    return
+                }
+                guard let avAsset else {
+                    continuation.resume(throwing: AssetError.fetch("Can't fetch", nil))
+                    return
+                }
+                continuation.resume(returning: avAsset)
             }
         }
     }

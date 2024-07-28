@@ -9,36 +9,15 @@
 import UIKit
 import SwiftUI
 
-class StatusViewModel: ObservableObject {
-    @Published
-    var photosState: String = ""
-    @Published
-    var photosProgress: Double = 0
-
-    @Published
-    var dropboxState: String = ""
-    @Published
-    var dropboxProgress: Double = 0
-
-    @Published
-    var uploadState: String = ""
-    @Published
-    var uploadProgress: Double = 0
-
-    @Published
-    var errors: [ServiceError] = []
-}
-
-struct LeadingTrailingLabel: View {
+struct StateLabel: View {
     let leading: String
-    let trailing: String
-    let progress: Double
+    let state: ServiceState
 
     var body: some View {
         ZStack {
             // background is a progress bar that fills up behind the label
             GeometryReader { metrics in
-                HStack(spacing: .zero) {
+                if let progress = state.progressPercent {
                     Color.green
                         .opacity(0.3)
                         .frame(width: metrics.size.width * progress)
@@ -48,8 +27,10 @@ struct LeadingTrailingLabel: View {
             HStack {
                 Text(leading).fixedSize(horizontal: true, vertical: true)
                 Spacer()
-                Text(trailing)
-            }.padding()
+                Text(state.stringState)
+            }
+            // Pad the label, not the background
+            .padding()
         }
     }
 
@@ -58,107 +39,114 @@ struct LeadingTrailingLabel: View {
 struct StatusView: View {
 
     @ObservedObject
-    var viewModel: StatusViewModel
+    var syncManager: SyncManager
 
     var body: some View {
         VStack {
             VStack(alignment: .leading) {
-                Text("Sync").font(.title).padding()
-                LeadingTrailingLabel(leading: "Photos database", trailing: viewModel.photosState, progress: viewModel.photosProgress)
-                LeadingTrailingLabel(leading: "Dropbox", trailing: viewModel.dropboxState, progress: viewModel.dropboxProgress)
-                LeadingTrailingLabel(leading: "Upload", trailing: viewModel.uploadState, progress: viewModel.uploadProgress)
+
+                Text("Sync")
+                    .font(.title)
+                    .padding()
+
+                StateLabel(leading: "Photos database", state: syncManager.photoState)
+                StateLabel(leading: "Dropbox", state: syncManager.dropboxState)
+                StateLabel(leading: "Upload", state: syncManager.uploadState)
 
                 Divider()
-                Text("Errors").font(.title).padding()
+                    .padding([.leading, .trailing])
 
-            }.fixedSize(horizontal: false, vertical: true)
+                Text("Errors")
+                    .font(.title)
+                    .padding()
 
-            Table(viewModel.errors) {
+            }
+            // Seems to be required so that the table has all the flex
+            .fixedSize(horizontal: false, vertical: true)
+
+            Table(syncManager.errors) {
                 TableColumn("Path", value: \.path)
                 TableColumn("Messasge", value: \.message)
             }.frame(maxHeight: .infinity)
         }
+
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                if syncManager.isLoggedIn {
+                    Button("Log out") {
+                        // TODO
+                    }
+                } else {
+                    Button("Connect to Dropbox") {
+                        // TODO
+                    }
+                }
+            }
+        }
     }
 }
 
-class StatusViewController: UIHostingController<StatusView>, SyncManagerDelegate {
+class StatusViewController: UIHostingController<StatusView> {
 
     var syncManager: SyncManager
 
-    var viewModel = StatusViewModel()
-
     init(syncManager: SyncManager) {
         self.syncManager = syncManager
-        super.init(rootView: StatusView(viewModel: viewModel))
-        syncManager.delegate = self
-        render()
+        super.init(rootView: StatusView(syncManager: syncManager))
     }
 
     @available(*, unavailable)
     required init?(coder _: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
+}
 
-    func syncManagerUpdatedState(_ syncManager: SyncManager) {
-        render()
+private extension ServiceState {
+    var stringState: String {
+        if complete {
+            if errors.isEmpty {
+                return "Complete (\(total))"
+            } else {
+                return "Failed (\(errors.count) errors)"
+            }
+        } else if total == 0 {
+            return "Waiting"
+        } else {
+            return "Fetching \(progress) / \(total)"
+        }
     }
 
-    func render() {
-        assert(Thread.isMainThread)
-        switch syncManager.photoState {
-        case .none:
-            viewModel.photosState = "Not started"
-        case let .some(serviceState):
-            if serviceState.complete {
-                if serviceState.errors.isEmpty {
-                    viewModel.photosState = "Complete (found \(serviceState.total) photos)"
-                    viewModel.photosProgress = 1
-                } else {
-                    viewModel.photosState = "Failed (\(serviceState.errors.count) errors)"
-                    viewModel.photosProgress = 0
-                }
-            } else {
-                viewModel.photosState = "Fetching \(serviceState.progress) / \(serviceState.total)"
-                viewModel.photosProgress = Double(serviceState.progress) / Double(serviceState.total)
-            }
+    var progressPercent: Double? {
+        if total == 0 {
+            return nil
         }
-
-        switch syncManager.dropboxState {
-        case .none:
-            viewModel.dropboxState = "Not started"
-        case let .some(serviceState):
-            if serviceState.complete {
-                if serviceState.errors.isEmpty {
-                    viewModel.dropboxState = "Complete (found \(serviceState.total) files)"
-                    viewModel.dropboxProgress = 1
-                } else {
-                    viewModel.dropboxState = "Failed (\(serviceState.errors.count) errors)"
-                    viewModel.dropboxProgress = 0
-                }
-            } else {
-                viewModel.dropboxState = "Fetching \(serviceState.progress) / \(serviceState.total)"
-                viewModel.dropboxProgress = Double(serviceState.progress) / Double(serviceState.total)
-            }
-        }
-
-        switch syncManager.uploadState {
-        case .none:
-            viewModel.uploadState = "Not started"
-        case let .some(serviceState):
-            if serviceState.complete {
-                if serviceState.errors.isEmpty {
-                    viewModel.uploadState = "Complete"
-                    viewModel.uploadProgress = 1
-                } else {
-                    viewModel.uploadState = "Failed (\(serviceState.errors.count) errors)"
-                    viewModel.uploadProgress = 0
-                }
-            } else {
-                viewModel.uploadState = "Uploaded \(serviceState.progress) / \(serviceState.total)"
-                viewModel.uploadProgress = Double(serviceState.progress) / Double(serviceState.total)
-            }
-        }
-
-        viewModel.errors = syncManager.errors
+        return Double(progress) / Double(total)
     }
 }
+
+
+//    func updateDropboxNavigationItem() {
+//        let item: UIBarButtonItem
+//        if syncManager.isLoggedIn {
+//            item = UIBarButtonItem(primaryAction: UIAction(title: "Log out", handler: { _ in
+//                DropboxClientsManager.resetClients()
+//                self.updateDropboxNavigationItem()
+//                self.startDropboxSync()
+//            }))
+//        } else {
+//            item = UIBarButtonItem(primaryAction: UIAction(title: "Connect to Dropbox", handler: { _ in
+//                let scopeRequest = ScopeRequest(
+//                    scopeType: .user,
+//                    scopes: ["files.metadata.read", "files.content.write"],
+//                    includeGrantedScopes: false)
+//                DropboxClientsManager.authorizeFromControllerV2(
+//                    UIApplication.shared,
+//                    controller: self.navigationController,
+//                    loadingStatusDelegate: nil,
+//                    openURL: { UIApplication.shared.open($0, options: [:], completionHandler: nil) },
+//                    scopeRequest: scopeRequest)
+//            }))
+//        }
+//
+//        navigationController.viewControllers.first?.navigationItem.rightBarButtonItem = item
+//    }

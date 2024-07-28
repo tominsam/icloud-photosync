@@ -12,6 +12,7 @@ disabled_rules:
   - function_parameter_count
   - trailing_whitespace
   - comment_spacing
+  - implicit_getter
 
 excluded:
   - PhotoSync/Utilities/TimezoneMapper.swift
