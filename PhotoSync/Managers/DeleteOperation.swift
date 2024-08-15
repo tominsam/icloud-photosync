@@ -14,6 +14,7 @@ import UIKit
 
 enum DeleteError: Error {
     case otherResponse
+    case api(Files.DeleteBatchError)
 }
 
 class DeleteOperation {
@@ -61,7 +62,7 @@ class DeleteOperation {
                 // Loop again
                 break
             case .failed(let error):
-                throw error
+                throw DeleteError.api(error)
             case .other:
                 throw DeleteError.otherResponse
             }

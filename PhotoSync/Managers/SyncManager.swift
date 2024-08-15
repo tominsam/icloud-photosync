@@ -36,8 +36,6 @@ class SyncManager: ObservableObject {
     @Published
     var isLoggedIn: Bool = false
     @Published
-    var syncing: Bool = false
-    @Published
     var photoState: ServiceState = .init()
     @Published
     var dropboxState: ServiceState = .init()
@@ -56,20 +54,25 @@ class SyncManager: ObservableObject {
         self.persistentContainer = persistentContainer
     }
 
+
+    var syncTask: Task<Void, Never>?
+
     func maybeSync() {
         isLoggedIn = dropboxClient != nil
-        guard !syncing else { return }
         guard isLoggedIn else { return }
         guard PhotoKitManager.hasPermission else { return }
-        sync()
+        guard syncTask == nil else { return }
+        syncTask = Task {
+            defer { syncTask = nil }
+            await sync()
+        }
     }
 
-    func sync() {
-        assert(!syncing)
+    @MainActor
+    func sync() async {
         guard let client = dropboxClient else {
             fatalError()
         }
-        syncing = true
 
         // Clear out anything we left in temp from the last run
         try? FileManager.default.createDirectory(at: SyncManager.tempDir, withIntermediateDirectories: true)
@@ -96,39 +99,31 @@ class SyncManager: ObservableObject {
             self.delegate?.syncManagerUpdatedState(self)
         }
 
-        Task {
-            do {
-                NSLog("%@", "Starting photo sync")
-                async let photoFetch: Void = photoManager.sync()
-                NSLog("%@", "Starting dropbox sync")
-                async let dropboxFetch: Void = dropboxManager.sync()
+        do {
+            NSLog("%@", "Starting photo sync")
+            async let photoFetch: Void = photoManager.sync()
+            NSLog("%@", "Starting dropbox sync")
+            async let dropboxFetch: Void = dropboxManager.sync()
 
-                try await photoFetch
-                try await dropboxFetch
-
-            } catch SwiftyDropbox.CallError<SwiftyDropbox.Files.ListFolderError>.authError,
-                    SwiftyDropbox.CallError<SwiftyDropbox.Files.ListFolderContinueError>.authError {
-                // TODO this is not the way to handle auth errors!
-                exit(1)
-            } catch {
-                fatalError(error.localizedDescription)
-            }
-            if !dropboxState.errors.isEmpty || !photoState.errors.isEmpty {
-                NSLog("There are errors in initial sync!")
-                return
-            }
-
-            do {
-                NSLog("%@", "Starting upload")
-                try await uploadManager.sync(allAssets: photoManager.allAssets)
-                syncing = false
-            } catch {
-                NSLog("%@", "Upload failed - \(error) \(String(describing: error)) \(error.localizedDescription)")
-                fatalError(error.localizedDescription)
-            }
-
-            // resync dropbox at the end
-            try? await dropboxManager.sync()
+            try await photoFetch
+            try await dropboxFetch
+        } catch {
+            fatalError(error.localizedDescription)
         }
+        if !dropboxState.errors.isEmpty || !photoState.errors.isEmpty {
+            NSLog("There are errors in initial sync!")
+            return
+        }
+
+        do {
+            NSLog("%@", "Starting upload")
+            try await uploadManager.sync(allAssets: photoManager.allAssets)
+        } catch {
+            NSLog("%@", "Upload failed - \(error) \(String(describing: error)) \(error.localizedDescription)")
+            fatalError(error.localizedDescription)
+        }
+
+        // resync dropbox at the end
+        try? await dropboxManager.sync()
     }
 }

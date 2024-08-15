@@ -34,10 +34,6 @@ class DropboxManager: Manager {
             let listResult: Files.ListFolderResult
             do {
                 listResult = try await dropboxClient.files.listFolder(path: "", recursive: true, includeDeleted: true, limit: 2000).asyncResponse()
-            } catch let error as SwiftyDropbox.CallError<SwiftyDropbox.Files.ListFolderError> {
-                NSLog("Error calling dropbox listFolder: %@", error.description)
-                await recordError(ServiceError(path: "/", message: error.description, error: error))
-                throw error
             } catch {
                 NSLog("Error calling dropbox listFolder: %@", error.localizedDescription)
                 await recordError(ServiceError(path: "/", message: error.localizedDescription, error: error))

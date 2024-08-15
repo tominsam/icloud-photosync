@@ -86,8 +86,6 @@ class BatchUploader: LoggingOperation {
                             // We exported a video to a temp file, let's clean that up
                             try? FileManager.default.removeItem(at: url)
                         }
-                    } catch let error as SwiftyDropbox.CallError<SwiftyDropbox.Files.UploadSessionStartError> {
-                        return .failure(path: task.filename, message: error.description, error: error)
                     } catch {
                         return .failure(path: task.filename, message: error.localizedDescription, error: error)
                     }

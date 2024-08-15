@@ -40,8 +40,10 @@ class UploadManager: Manager {
             await self.addProgress(chunk.count)
         }
 
-        // then delete removed files (going faster than this throws rate limit errors for me)
-        await deletions.chunked(into: 40).parallelMap(maxJobs: 8) { chunk in
+        // then delete removed files (don't need parallel here, the server
+        // batch call is fast enough).
+        // TODO this should be a separate progress bar
+        for chunk in deletions.chunked(into: 400) {
             await self.delete(chunk)
             await self.addProgress(chunk.count)
         }
