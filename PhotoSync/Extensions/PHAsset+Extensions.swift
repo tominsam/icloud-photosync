@@ -90,7 +90,7 @@ extension PHAsset {
         case .image:
             let options = PHImageRequestOptions()
             options.deliveryMode = .highQualityFormat
-            options.version = .current // save out edited versions (or original if no edits)
+            options.version = .original // save out original
             options.isNetworkAccessAllowed = true // download if required
             options.isSynchronous = true // stay on thread for async simplicity
 
