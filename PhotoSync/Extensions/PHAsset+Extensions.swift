@@ -199,7 +199,7 @@ extension PHAsset {
             throw AssetError.fetch("Can't start export session", nil)
         }
         let filename = UUID().uuidString + ".m4v"
-        let tempFile = SyncManager.tempDir.appendingPathComponent(filename, isDirectory: false)
+        let tempFile = await SyncManager.tempDir.appendingPathComponent(filename, isDirectory: false)
         export.outputURL = tempFile
         export.outputFileType = .m4v
         export.shouldOptimizeForNetworkUse = true
@@ -230,7 +230,7 @@ extension PHAsset {
             print(String(describing: m))
         }
 
-        let tempFile = SyncManager.tempDir.appendingPathComponent(asset.url.lastPathComponent, isDirectory: false)
+        let tempFile = await SyncManager.tempDir.appendingPathComponent(asset.url.lastPathComponent, isDirectory: false)
         guard let export = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetPassthrough) else {
             throw AssetError.fetch("Can't start export session", nil)
         }

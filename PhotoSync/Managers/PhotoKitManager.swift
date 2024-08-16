@@ -28,7 +28,7 @@ class PhotoKitManager: Manager {
 
         let context = persistentContainer.newBackgroundContext()
         let count = Photo.count(in: context)
-        await setProgress(0, total: count, named: "Local photos")
+        var state = await stateManager.createState(named: "Local photos", total: count)
         let firstSync = count == 0
 
         /*
@@ -53,14 +53,12 @@ class PhotoKitManager: Manager {
         // so it's better to update more frequently, later syncs are bound by DB insert
         // rate, and larger blocks are more efficient.
         let fetchSize = firstSync ? 200 : 1000
-        await setProgress(0, total: allAssets.count, named: "Local photos")
-        var progress = 0
+        await state.updateTotal(to: allAssets.count)
 
         for chunk in allAssets.chunked(into: fetchSize) {
+            await state.increment(chunk.count)
             try await Photo.insertOrUpdate(chunk, into: context)
             try await context.performSave(andReset: true)
-            progress += chunk.count
-            await setProgress(progress, total: allAssets.count, named: "Local photos")
         }
 
         let deleteMe: Set<String> = Set(
@@ -79,6 +77,6 @@ class PhotoKitManager: Manager {
 
         let duration = Double(DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds) / 1_000_000_000
         NSLog("Synced %d photos in %0.1f seconds (%.0f per second)", allAssets.count, duration, Double(allAssets.count) / duration)
-        await markComplete(allAssets.count, named: "Local photos")
+        await state.setComplete()
     }
 }

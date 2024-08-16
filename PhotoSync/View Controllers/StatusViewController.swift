@@ -51,8 +51,8 @@ struct StatusView: View {
                     .font(.title)
                     .padding()
 
-                ForEach(syncManager.state.keys, id: \.self, content: { name in
-                    StateLabel(leading: name, state: syncManager.state[name]!)
+                ForEach(syncManager.states, content: { state in
+                    StateLabel(leading: state.name, state: state)
                 })
 
                 Divider()
@@ -121,7 +121,6 @@ private extension ServiceState {
         return Double(progress) / Double(total)
     }
 }
-
 
 //    func updateDropboxNavigationItem() {
 //        let item: UIBarButtonItem

@@ -10,18 +10,8 @@ class Manager {
     let persistentContainer: NSPersistentContainer
     let dropboxClient: DropboxClient
 
-    let progressUpdate: (String, ServiceState) -> Void
+    let stateManager: StateManager
     private let errorUpdate: (ServiceError) -> Void
-
-    @MainActor
-    func setProgress(_ progress: Int, total: Int, named name: String) async {
-        progressUpdate(name, ServiceState(progress: progress, total: total))
-    }
-
-    @MainActor
-    func markComplete(_ total: Int, named name: String) async {
-        progressUpdate(name, ServiceState(progress: total, total: total, complete: true))
-    }
 
     @MainActor
     func recordError(_ error: ServiceError) async {
@@ -29,10 +19,10 @@ class Manager {
         errorUpdate(error)
     }
 
-    init(persistentContainer: NSPersistentContainer, dropboxClient: DropboxClient, progressUpdate: @escaping (String, ServiceState) -> Void, errorUpdate: @escaping (ServiceError) -> Void) {
+    init(persistentContainer: NSPersistentContainer, dropboxClient: DropboxClient, stateManager: StateManager, errorUpdate: @escaping (ServiceError) -> Void) {
         self.persistentContainer = persistentContainer
         self.dropboxClient = dropboxClient
-        self.progressUpdate = progressUpdate
+        self.stateManager = stateManager
         self.errorUpdate = errorUpdate
     }
 

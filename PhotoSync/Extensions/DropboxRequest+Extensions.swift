@@ -3,7 +3,6 @@
 import SwiftyDropbox
 import UIKit
 
-
 extension SwiftyDropbox.UploadRequest {
     enum UploadError: Error {
         case api(CallError<ESerial.ValueType>)

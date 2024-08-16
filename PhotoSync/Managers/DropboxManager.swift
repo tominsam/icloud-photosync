@@ -16,7 +16,7 @@ class DropboxManager: Manager {
         let count = await context.perform {
             DropboxFile.count(in: context)
         }
-        await setProgress(0, total: count, named: "Dropbox")
+        var state = await stateManager.createState(named: "Dropbox", total: count)
 
         // Try to resume a previous run if possible
         var cursor = (try await SyncToken.dataFor(type: .dropboxListFolder, in: context) as NSString?) as String?
@@ -39,7 +39,7 @@ class DropboxManager: Manager {
                 await recordError(ServiceError(path: "/", message: error.localizedDescription, error: error))
                 throw error
             }
-            cursor = try await gotPage(listResult, context: context)
+            cursor = try await gotPage(listResult, context: context, state: &state)
         }
         NSLog("Cursor is %@", String(describing: cursor))
 
@@ -53,7 +53,7 @@ class DropboxManager: Manager {
                 await recordError(ServiceError(path: "/", message: error.localizedDescription, error: error))
                 throw error
             }
-            cursor = try await gotPage(listResult, context: context)
+            cursor = try await gotPage(listResult, context: context, state: &state)
             if !listResult.hasMore {
                 NSLog("All files fetched from dropbox")
                 break
@@ -61,26 +61,23 @@ class DropboxManager: Manager {
         }
 
         NSLog("%@", "File sync complete")
-        await markComplete(count, named: "Dropbox")
+        await state.setComplete()
     }
 
-    func gotPage(_ listResult: Files.ListFolderResult, context: NSManagedObjectContext) async throws -> String {
-        try await self.insertPage(listResult: listResult)
+    func gotPage(_ listResult: Files.ListFolderResult, context: NSManagedObjectContext, state: inout ServiceState) async throws -> String {
+        try await self.insertPage(listResult: listResult, state: &state)
         try await SyncToken.insertOrUpdate(type: .dropboxListFolder, value: listResult.cursor as NSString, into: context)
         return listResult.cursor
     }
 
-    func insertPage(listResult: Files.ListFolderResult) async throws {
+    func insertPage(listResult: Files.ListFolderResult, state: inout ServiceState) async throws {
         // There are also folders in this list but they're unimportant
         let fileMetadata = listResult.entries.compactMap { $0 as? Files.FileMetadata }
         let deletedMetadata = listResult.entries.compactMap { $0 as? Files.DeletedMetadata }
         NSLog("%@", "Inserting / updating \(fileMetadata.count) file(s), deleting \(deletedMetadata.count) file(s)")
-
         let context = persistentContainer.newBackgroundContext()
         try await DropboxFile.insertOrUpdate(fileMetadata, delete: deletedMetadata, into: context)
-
-        let total = DropboxFile.count(in: context)
-        await setProgress(total, total: total, named: "Dropbox")
+        await state.setComplete()
     }
 
 }

@@ -1,6 +1,7 @@
 //  Copyright 2022 Thomas Insam. All rights reserved.
 
 import CoreData
+import Combine
 import Foundation
 import KeychainSwift
 import Photos
@@ -15,12 +16,72 @@ struct ServiceError: Identifiable {
     let error: Error?
 }
 
-struct ServiceState {
-    var progress: Int = 0
-    var total: Int = 0
-    var complete: Bool = false
+@MainActor
+struct ServiceState: Identifiable {
+
+    let notify: (ServiceState) -> Void
+
+    let name: String
+    let id: UUID
+    public private(set) var progress: Int = 0 { didSet { notify(self) }}
+    public private(set) var total: Int = 0 { didSet { notify(self) }}
+    public private(set) var complete: Bool = false { didSet { notify(self) }}
+
+    init(name: String, total: Int, notify: @escaping (ServiceState) -> Void) {
+        self.id = UUID()
+        self.name = name
+        self.total = total
+        self.notify = notify
+    }
+
+    mutating func remove() {
+        total = -1
+    }
+
+    mutating func increment(_ by: Int = 1) {
+        progress += by
+    }
+
+    mutating func setComplete() {
+        complete = true
+    }
+
+    mutating func updateTotal(to total: Int) {
+        self.total = total
+    }
 }
 
+@MainActor
+class StateManager {
+    let notify: ([ServiceState]) -> Void
+    var states: [ServiceState] = []
+
+    init(notify: @escaping ([ServiceState]) -> Void) {
+        self.notify = notify
+    }
+
+    func createState(named name: String, total: Int = 0) -> ServiceState {
+        let newState = ServiceState(name: name, total: total, notify: { [weak self] state in
+            guard let self else { return }
+            if state.total < 0 {
+                states.removeAll { $0.id == state.id }
+            } else {
+                if let index = states.firstIndex(where: { $0.id == state.id }) {
+                    states[index] = state
+                } else {
+                    states.append(state)
+                }
+            }
+            notify(states)
+        })
+        states.append(newState)
+        notify(states)
+        return newState
+    }
+
+}
+
+@MainActor
 class SyncManager: ObservableObject {
     static let KeychainDropboxAccessToken = "KeychainDropboxAccessToken"
     private let keychain = KeychainSwift()
@@ -32,9 +93,13 @@ class SyncManager: ObservableObject {
     @Published
     var isLoggedIn: Bool = false
     @Published
-    var state: OrderedDictionary<String, ServiceState> = .init()
+    var states: [ServiceState] = []
     @Published
     var errors: [ServiceError] = []
+
+    lazy var stateManager = StateManager(notify: { [weak self] newStates in
+        self?.states = newStates
+    })
 
     private var dropboxClient: DropboxClient? { DropboxClientsManager.authorizedClient }
 
@@ -73,34 +138,24 @@ class SyncManager: ObservableObject {
             }
         }
 
-        let progressUpdate: (String, ServiceState) -> Void = { [weak self] name, progress in
-            DispatchQueue.main.async {
-                if progress.total < 0 {
-                    self?.state[name] = nil
-                } else {
-                    self?.state[name] = progress
-                }
-            }
-        }
-
         let photoManager = PhotoKitManager(
             persistentContainer: persistentContainer,
             dropboxClient: client,
-            progressUpdate: progressUpdate,
+            stateManager: stateManager,
             errorUpdate: { [weak self] error in
                 self?.errors.append(error)
             })
         let dropboxManager = DropboxManager(
             persistentContainer: persistentContainer,
             dropboxClient: client,
-            progressUpdate: progressUpdate,
+            stateManager: stateManager,
             errorUpdate: { [weak self] error in
                 self?.errors.append(error)
             })
         let uploadManager = UploadManager(
             persistentContainer: persistentContainer,
             dropboxClient: client,
-            progressUpdate: progressUpdate,
+            stateManager: stateManager,
             errorUpdate: { [weak self] error in
                 self?.errors.append(error)
             })

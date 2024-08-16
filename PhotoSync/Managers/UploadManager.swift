@@ -11,7 +11,6 @@ class UploadManager: Manager {
 
     func sync(allAssets: [PHAsset]) async throws {
         let context = persistentContainer.newBackgroundContext()
-        let count = await context.perform { Photo.count(in: context) }
 
         let (changes, deletions) = try await iterateAllPhotos(inContext: context, allAssets: allAssets)
 
@@ -19,55 +18,44 @@ class UploadManager: Manager {
         let replacements = changes.filter { $0.state == .replacement }
         let unknown = changes.filter { $0.state == .unknown }
 
-        await setProgress(0, total: uploads.count, named: "Uploads")
-        await setProgress(0, total: replacements.count, named: "Replacements")
-        await setProgress(0, total: unknown.count, named: "Unknown")
-        await setProgress(0, total: deletions.count, named: "Deletions")
-
-        NSLog("%@", "Accumulated \(uploads.count) uploads, \(replacements.count) replacements, \(unknown.count) unknown, and \(deletions.count) deletions")
+        var uploadState = await stateManager.createState(named: "New", total: uploads.count)
+        var replacementState = await stateManager.createState(named: "Updated", total: replacements.count)
+        var unknownState = await stateManager.createState(named: "Unknown", total: unknown.count)
+        var deletionState = await stateManager.createState(named: "Deleted", total: deletions.count)
 
         // prioritize new files
-        var uploadsComplete = 0
         await uploads.chunked(into: 10).parallelMap(maxJobs: 3) { chunk in
+            await uploadState.increment(chunk.count)
             await self.upload(chunk)
-            uploadsComplete += chunk.count
-            await self.setProgress(uploadsComplete, total: uploads.count, named: "Uploads")
         }
-        await markComplete(uploads.count, named: "Uploads")
+        await uploadState.setComplete()
 
         // then upload changed files
-        var replacementsComplete = 0
         await replacements.chunked(into: 10).parallelMap(maxJobs: 3) { chunk in
+            await replacementState.increment(chunk.count)
             await self.upload(chunk)
-            replacementsComplete += chunk.count
-            await self.setProgress(replacementsComplete, total: replacements.count, named: "Replacements")
         }
-        await markComplete(replacements.count, named: "Replacements")
+        await replacementState.setComplete()
 
-        var unknownComplete = 0
         await unknown.chunked(into: 10).parallelMap(maxJobs: 3) { chunk in
+            await unknownState.increment(chunk.count)
             await self.upload(chunk)
-            unknownComplete += chunk.count
-            await self.setProgress(unknownComplete, total: unknown.count, named: "Unknown")
         }
-        await markComplete(unknown.count, named: "Unknown")
+        await unknownState.setComplete()
 
         // then delete removed files (don't need parallel here, the server
         // batch call is fast enough).
-        // TODO this should be a separate progress bar
-        var deletionsComplete = 0
         for chunk in deletions.chunked(into: 400) {
+            await uploadState.increment(chunk.count)
             await self.delete(chunk)
-            deletionsComplete += chunk.count
-            await self.setProgress(deletionsComplete, total: deletions.count, named: "Deletions")
         }
-        await markComplete(deletions.count, named: "Deletions")
+        await deletionState.setComplete()
 
         NSLog("%@", "Upload complete")
     }
 
     func upload(_ tasks: [BatchUploader.UploadTask]) async {
-        let finishResults = await BatchUploader.batchUpload(persistentContainer: persistentContainer, dropboxClient: dropboxClient, tasks: tasks, progressUpdate: progressUpdate)
+        let finishResults = await BatchUploader.batchUpload(persistentContainer: persistentContainer, dropboxClient: dropboxClient, tasks: tasks, stateManager: stateManager)
         for result in finishResults {
             if case let .failure(path, message, error) = result {
                 await recordError(ServiceError(path: path, message: message, error: error))
