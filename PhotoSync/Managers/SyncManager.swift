@@ -4,6 +4,7 @@ import CoreData
 import Foundation
 import KeychainSwift
 import Photos
+import OrderedCollections
 import SwiftyDropbox
 import UIKit
 
@@ -18,11 +19,6 @@ struct ServiceState {
     var progress: Int = 0
     var total: Int = 0
     var complete: Bool = false
-    var errors: [ServiceError] = []
-}
-
-protocol SyncManagerDelegate: NSObjectProtocol {
-    func syncManagerUpdatedState(_ syncManager: SyncManager)
 }
 
 class SyncManager: ObservableObject {
@@ -36,24 +32,15 @@ class SyncManager: ObservableObject {
     @Published
     var isLoggedIn: Bool = false
     @Published
-    var photoState: ServiceState = .init()
+    var state: OrderedDictionary<String, ServiceState> = .init()
     @Published
-    var dropboxState: ServiceState = .init()
-    @Published
-    var uploadState: ServiceState = .init()
-
-    var errors: [ServiceError] {
-        return photoState.errors + dropboxState.errors + uploadState.errors
-    }
-
-    public weak var delegate: SyncManagerDelegate?
+    var errors: [ServiceError] = []
 
     private var dropboxClient: DropboxClient? { DropboxClientsManager.authorizedClient }
 
     init(persistentContainer: NSPersistentContainer) {
         self.persistentContainer = persistentContainer
     }
-
 
     var syncTask: Task<Void, Never>?
 
@@ -86,18 +73,37 @@ class SyncManager: ObservableObject {
             }
         }
 
-        let photoManager = PhotoKitManager(persistentContainer: persistentContainer, dropboxClient: client) { progress in
-            self.photoState = progress
-            self.delegate?.syncManagerUpdatedState(self)
+        let progressUpdate: (String, ServiceState) -> Void = { [weak self] name, progress in
+            DispatchQueue.main.async {
+                if progress.total < 0 {
+                    self?.state[name] = nil
+                } else {
+                    self?.state[name] = progress
+                }
+            }
         }
-        let dropboxManager = DropboxManager(persistentContainer: persistentContainer, dropboxClient: client) { progress in
-            self.dropboxState = progress
-            self.delegate?.syncManagerUpdatedState(self)
-        }
-        let uploadManager = UploadManager(persistentContainer: persistentContainer, dropboxClient: client) { progress in
-            self.uploadState = progress
-            self.delegate?.syncManagerUpdatedState(self)
-        }
+
+        let photoManager = PhotoKitManager(
+            persistentContainer: persistentContainer,
+            dropboxClient: client,
+            progressUpdate: progressUpdate,
+            errorUpdate: { [weak self] error in
+                self?.errors.append(error)
+            })
+        let dropboxManager = DropboxManager(
+            persistentContainer: persistentContainer,
+            dropboxClient: client,
+            progressUpdate: progressUpdate,
+            errorUpdate: { [weak self] error in
+                self?.errors.append(error)
+            })
+        let uploadManager = UploadManager(
+            persistentContainer: persistentContainer,
+            dropboxClient: client,
+            progressUpdate: progressUpdate,
+            errorUpdate: { [weak self] error in
+                self?.errors.append(error)
+            })
 
         do {
             NSLog("%@", "Starting photo sync")
@@ -110,7 +116,7 @@ class SyncManager: ObservableObject {
         } catch {
             fatalError(error.localizedDescription)
         }
-        if !dropboxState.errors.isEmpty || !photoState.errors.isEmpty {
+        if !errors.isEmpty {
             NSLog("There are errors in initial sync!")
             return
         }

@@ -10,61 +10,30 @@ class Manager {
     let persistentContainer: NSPersistentContainer
     let dropboxClient: DropboxClient
 
-    private let progressUpdate: @MainActor(ServiceState) -> Void
-    private var _state: ServiceState?
+    let progressUpdate: (String, ServiceState) -> Void
+    private let errorUpdate: (ServiceError) -> Void
 
     @MainActor
-    func setTotal(_ total: Int) async {
-        var state = self._state ?? ServiceState(progress: 0, total: 0)
-        state.total = total
-        state.complete = false
-        self._state = state
-        let updateState = state
-        progressUpdate(updateState)
+    func setProgress(_ progress: Int, total: Int, named name: String) async {
+        progressUpdate(name, ServiceState(progress: progress, total: total))
     }
 
     @MainActor
-    func setProgress(_ progress: Int) async {
-        var state = self._state ?? ServiceState(progress: 0, total: 0)
-        state.progress = progress
-        state.complete = false
-        self._state = state
-        let updateState = state
-        progressUpdate(updateState)
-    }
-
-    @MainActor
-    func addProgress(_ progress: Int) async {
-        var state = self._state ?? ServiceState(progress: 0, total: 0)
-        state.progress += progress
-        state.complete = false
-        self._state = state
-        let updateState = state
-        progressUpdate(updateState)
-    }
-
-    @MainActor
-    func markComplete() async {
-        var state = self._state ?? ServiceState(progress: 0, total: 0)
-        state.complete = true
-        self._state = state
-        let updateState = state
-        progressUpdate(updateState)
+    func markComplete(_ total: Int, named name: String) async {
+        progressUpdate(name, ServiceState(progress: total, total: total, complete: true))
     }
 
     @MainActor
     func recordError(_ error: ServiceError) async {
         NSLog("Recording error: %@ : %@", error.path, error.message)
-        var state = _state ?? ServiceState(progress: 0, total: 0)
-        state.errors.append(error)
-        self._state = state
-        progressUpdate(state)
+        errorUpdate(error)
     }
 
-    init(persistentContainer: NSPersistentContainer, dropboxClient: DropboxClient, progressUpdate: @MainActor @escaping (ServiceState) -> Void) {
+    init(persistentContainer: NSPersistentContainer, dropboxClient: DropboxClient, progressUpdate: @escaping (String, ServiceState) -> Void, errorUpdate: @escaping (ServiceError) -> Void) {
         self.persistentContainer = persistentContainer
         self.dropboxClient = dropboxClient
         self.progressUpdate = progressUpdate
+        self.errorUpdate = errorUpdate
     }
 
 }

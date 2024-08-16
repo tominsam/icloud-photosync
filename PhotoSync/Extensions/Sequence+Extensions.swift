@@ -34,7 +34,7 @@ extension Array {
     }
 }
 
-extension Collection where Element: Sendable {
+extension Sequence where Element: Sendable {
     // Notes - return ordering is indeterminate, should fix that
     @discardableResult
     func parallelMap<T>(maxJobs: Int = 5, block: @escaping (Element) async throws -> T) async rethrows -> [T] {

@@ -16,7 +16,7 @@ class DropboxManager: Manager {
         let count = await context.perform {
             DropboxFile.count(in: context)
         }
-        await setTotal(count)
+        await setProgress(0, total: count, named: "Dropbox")
 
         // Try to resume a previous run if possible
         var cursor = (try await SyncToken.dataFor(type: .dropboxListFolder, in: context) as NSString?) as String?
@@ -61,7 +61,7 @@ class DropboxManager: Manager {
         }
 
         NSLog("%@", "File sync complete")
-        await markComplete()
+        await markComplete(count, named: "Dropbox")
     }
 
     func gotPage(_ listResult: Files.ListFolderResult, context: NSManagedObjectContext) async throws -> String {
@@ -80,8 +80,7 @@ class DropboxManager: Manager {
         try await DropboxFile.insertOrUpdate(fileMetadata, delete: deletedMetadata, into: context)
 
         let total = DropboxFile.count(in: context)
-        await setTotal(total)
-        await setProgress(total)
+        await setProgress(total, total: total, named: "Dropbox")
     }
 
 }

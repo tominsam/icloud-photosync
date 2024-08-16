@@ -43,13 +43,24 @@ class BatchUploader: LoggingOperation {
         case failure(path: String, message: String, error: Error?)
     }
 
-    public static func batchUpload(persistentContainer: NSPersistentContainer, dropboxClient: DropboxClient, tasks: [UploadTask]) async -> [FinishResult] {
-        NSLog("%@", "Fetching chunk of \(tasks.count) files")
+    static var chunkCount = 0
+    public static func batchUpload(persistentContainer: NSPersistentContainer, dropboxClient: DropboxClient, tasks: [UploadTask], progressUpdate: @escaping (String, ServiceState) -> Void) async -> [FinishResult] {
+        chunkCount += 1
+        let localChunkCount = chunkCount
+        progressUpdate("Fetch chunk \(localChunkCount)", ServiceState(progress: 0, total: tasks.count))
+        progressUpdate("Upload chunk \(localChunkCount)", ServiceState(progress: 0, total: tasks.count))
+        defer {
+            progressUpdate("Fetch chunk \(localChunkCount)", ServiceState(progress: 0, total: -1))
+            progressUpdate("Upload chunk \(localChunkCount)", ServiceState(progress: 0, total: -1))
+        }
 
         // Download all the images, one at a time, in advance.
-        let data = await tasks.asyncMap { await download(persistentContainer: persistentContainer, asset: $0.asset) }
-
-        NSLog("%@", "Uploading chunk of \(data.filter { $0.hash != nil }.count) files")
+        let data = await tasks.enumerated().asyncMap {
+            let (offset, task) = $0
+            progressUpdate("Fetch chunk \(localChunkCount)", ServiceState(progress: offset, total: tasks.count))
+            return await download(persistentContainer: persistentContainer, asset: task.asset)
+        }
+        progressUpdate("Fetch chunk \(localChunkCount)", ServiceState(progress: tasks.count, total: tasks.count, complete: true))
 
         // concurrently upload all the files
         let uploadResults = await withTaskGroup(of: UploadResult.self) { group -> [UploadResult] in
@@ -60,6 +71,7 @@ class BatchUploader: LoggingOperation {
                     continue
                 }
                 group.addTask {
+                    progressUpdate("Upload chunk \(localChunkCount)", ServiceState(progress: 0, total: tasks.count))
                     let uploadSession: Files.UploadSessionFinishArg
                     do {
                         switch data {
@@ -100,13 +112,15 @@ class BatchUploader: LoggingOperation {
         }
 
         guard !uploadResults.isEmpty else {
-            NSLog("%@", "Skipped all files")
+            NSLog("%@", "Skipped all files for chunk \(localChunkCount)")
             return []
         }
 
         if uploadResults.count < tasks.count {
             NSLog("%@", "Skipped \(tasks.count - uploadResults.count) file(s)")
         }
+
+        progressUpdate("Upload chunk \(localChunkCount)", ServiceState(progress: tasks.count, total: tasks.count))
 
         do {
             return try await finish(dropboxClient: dropboxClient, entries: uploadResults)
@@ -226,7 +240,6 @@ class BatchUploader: LoggingOperation {
             }
         }
 
-        NSLog("%@", "Finishing \(finishArgs.count) uploads")
         let finishResult = try await dropboxClient.files.uploadSessionFinishBatchV2(entries: finishArgs).asyncResponse()
         var mutableFinishResults = Array(finishResult.entries)
         assert(mutableFinishResults.count == finishArgs.count)

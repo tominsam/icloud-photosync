@@ -12,7 +12,6 @@ class UploadManager: Manager {
     func sync(allAssets: [PHAsset]) async throws {
         let context = persistentContainer.newBackgroundContext()
         let count = await context.perform { Photo.count(in: context) }
-        await setTotal(count)
 
         let (changes, deletions) = try await iterateAllPhotos(inContext: context, allAssets: allAssets)
 
@@ -20,40 +19,55 @@ class UploadManager: Manager {
         let replacements = changes.filter { $0.state == .replacement }
         let unknown = changes.filter { $0.state == .unknown }
 
+        await setProgress(0, total: uploads.count, named: "Uploads")
+        await setProgress(0, total: replacements.count, named: "Replacements")
+        await setProgress(0, total: unknown.count, named: "Unknown")
+        await setProgress(0, total: deletions.count, named: "Deletions")
+
         NSLog("%@", "Accumulated \(uploads.count) uploads, \(replacements.count) replacements, \(unknown.count) unknown, and \(deletions.count) deletions")
-        await setTotal(uploads.count + replacements.count + unknown.count + deletions.count)
 
         // prioritize new files
+        var uploadsComplete = 0
         await uploads.chunked(into: 10).parallelMap(maxJobs: 3) { chunk in
             await self.upload(chunk)
-            await self.addProgress(chunk.count)
+            uploadsComplete += chunk.count
+            await self.setProgress(uploadsComplete, total: uploads.count, named: "Uploads")
         }
+        await markComplete(uploads.count, named: "Uploads")
 
         // then upload changed files
+        var replacementsComplete = 0
         await replacements.chunked(into: 10).parallelMap(maxJobs: 3) { chunk in
             await self.upload(chunk)
-            await self.addProgress(chunk.count)
+            replacementsComplete += chunk.count
+            await self.setProgress(replacementsComplete, total: replacements.count, named: "Replacements")
         }
+        await markComplete(replacements.count, named: "Replacements")
 
+        var unknownComplete = 0
         await unknown.chunked(into: 10).parallelMap(maxJobs: 3) { chunk in
             await self.upload(chunk)
-            await self.addProgress(chunk.count)
+            unknownComplete += chunk.count
+            await self.setProgress(unknownComplete, total: unknown.count, named: "Unknown")
         }
+        await markComplete(unknown.count, named: "Unknown")
 
         // then delete removed files (don't need parallel here, the server
         // batch call is fast enough).
         // TODO this should be a separate progress bar
+        var deletionsComplete = 0
         for chunk in deletions.chunked(into: 400) {
             await self.delete(chunk)
-            await self.addProgress(chunk.count)
+            deletionsComplete += chunk.count
+            await self.setProgress(deletionsComplete, total: deletions.count, named: "Deletions")
         }
+        await markComplete(deletions.count, named: "Deletions")
 
         NSLog("%@", "Upload complete")
-        await markComplete()
     }
 
     func upload(_ tasks: [BatchUploader.UploadTask]) async {
-        let finishResults = await BatchUploader.batchUpload(persistentContainer: persistentContainer, dropboxClient: dropboxClient, tasks: tasks)
+        let finishResults = await BatchUploader.batchUpload(persistentContainer: persistentContainer, dropboxClient: dropboxClient, tasks: tasks, progressUpdate: progressUpdate)
         for result in finishResults {
             if case let .failure(path, message, error) = result {
                 await recordError(ServiceError(path: path, message: message, error: error))

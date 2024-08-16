@@ -19,7 +19,7 @@ struct StateLabel: View {
             GeometryReader { metrics in
                 if let progress = state.progressPercent {
                     Color.green
-                        .opacity(0.3)
+                        .opacity(state.complete ? 0.1 : 0.3)
                         .frame(width: metrics.size.width * progress)
                 }
             }
@@ -30,7 +30,8 @@ struct StateLabel: View {
                 Text(state.stringState)
             }
             // Pad the label, not the background
-            .padding()
+            .padding([.leading, .trailing])
+            .padding([.top, .bottom], 12)
         }
     }
 
@@ -41,17 +42,18 @@ struct StatusView: View {
     @ObservedObject
     var syncManager: SyncManager
 
+    @ViewBuilder
     var body: some View {
-        VStack {
+        ScrollView {
             VStack(alignment: .leading) {
 
                 Text("Sync")
                     .font(.title)
                     .padding()
 
-                StateLabel(leading: "Photos database", state: syncManager.photoState)
-                StateLabel(leading: "Dropbox", state: syncManager.dropboxState)
-                StateLabel(leading: "Upload", state: syncManager.uploadState)
+                ForEach(syncManager.state.keys, id: \.self, content: { name in
+                    StateLabel(leading: name, state: syncManager.state[name]!)
+                })
 
                 Divider()
                     .padding([.leading, .trailing])
@@ -60,14 +62,11 @@ struct StatusView: View {
                     .font(.title)
                     .padding()
 
-            }
-            // Seems to be required so that the table has all the flex
-            .fixedSize(horizontal: false, vertical: true)
+                ForEach(syncManager.errors, id: \.id, content: { error in
+                    Text(error.message)
+                })
 
-            Table(syncManager.errors) {
-                TableColumn("Path", value: \.path)
-                TableColumn("Messasge", value: \.message)
-            }.frame(maxHeight: .infinity)
+            }
         }
 
         .toolbar {
@@ -104,19 +103,18 @@ class StatusViewController: UIHostingController<StatusView> {
 private extension ServiceState {
     var stringState: String {
         if complete {
-            if errors.isEmpty {
-                return "Complete (\(total))"
-            } else {
-                return "Failed (\(errors.count) errors)"
-            }
+            return "Complete (\(total))"
         } else if total == 0 {
             return "Waiting"
         } else {
-            return "Fetching \(progress) / \(total)"
+            return "\(progress) / \(total)"
         }
     }
 
     var progressPercent: Double? {
+        if complete {
+            return 1
+        }
         if total == 0 {
             return nil
         }

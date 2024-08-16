@@ -12,6 +12,9 @@ packages:
   CollectionConcurrencyKit:
     url: https://github.com/JohnSundell/CollectionConcurrencyKit.git
     revision: b4f23e24b5a1bff301efc5e70871083ca029ff95
+  Collections:
+    url: https://github.com/apple/swift-collections.git
+    exactVersion: 1.1.2
 
 targets:
   PhotoSync:
