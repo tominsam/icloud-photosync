@@ -40,6 +40,7 @@ struct ServiceState: Identifiable {
 
     mutating func increment(_ by: Int = 1) {
         progress += by
+        total = max(total, progress)
     }
 
     mutating func setComplete() {
@@ -89,6 +90,7 @@ class SyncManager: ObservableObject {
     static let tempDir = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true).appendingPathComponent("PhotoSync", conformingTo: .folder)
 
     let persistentContainer: NSPersistentContainer
+    var backgroundTask: UIBackgroundTaskIdentifier?
 
     @Published
     var isLoggedIn: Bool = false
@@ -124,6 +126,13 @@ class SyncManager: ObservableObject {
     func sync() async {
         guard let client = dropboxClient else {
             fatalError()
+        }
+
+        backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "Sync") { [weak self] in
+            NSLog("Stopping background task")
+            if let identifier = self?.backgroundTask {
+                UIApplication.shared.endBackgroundTask(identifier)
+            }
         }
 
         // Clear out anything we left in temp from the last run
@@ -186,5 +195,10 @@ class SyncManager: ObservableObject {
 
         // resync dropbox at the end
         try? await dropboxManager.sync()
+
+        if let identifier = backgroundTask {
+            UIApplication.shared.endBackgroundTask(identifier)
+        }
+        UIApplication.shared.isIdleTimerDisabled = false
     }
 }

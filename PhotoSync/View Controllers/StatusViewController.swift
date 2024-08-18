@@ -104,8 +104,6 @@ private extension ServiceState {
     var stringState: String {
         if complete {
             return "Complete (\(total))"
-        } else if total == 0 {
-            return "Waiting"
         } else {
             return "\(progress) / \(total)"
         }

@@ -109,27 +109,11 @@ extension PHAsset {
             return .data(dataWithExif, hash: dataWithExif.dropboxContentHash())
 
         case .video:
-
             let avAsset = try await manager.getAVAsset(for: self)
-            NSLog("%@", "Video downloaded as \(avAsset.description)")
-
-//            if let composition = avAsset as? AVComposition {
-//                if let url = try await Self.exportSlowmo(composition: composition, date: creationDate) {
-//                    return .tempUrl(url, hash: url.dropboxContentHash())
-//                } else {
-//                    throw AssetError.fetch("Can't export slomo video", nil)
-//                }
-//            }
             if let avUrlAsset = avAsset as? AVURLAsset {
                 return .url(avUrlAsset.url, hash: avUrlAsset.url.dropboxContentHash())
-                //                if let url = try await Self.setDate(onAsset: avUrlAsset, date: self.creationDate, timezone: self.timezone) {
-                //                    return .tempUrl(url, hash: url.dropboxContentHash())
-                //                } else {
-                //                    return .url(avUrlAsset.url, hash: avUrlAsset.url.dropboxContentHash())
-                //                }
             }
-                throw AssetError.fetch("Unknown asset type \(type(of: avAsset))", nil)
-
+            throw AssetError.fetch("Unknown asset type \(type(of: avAsset))", nil)
         default:
             throw AssetError.mediaType(mediaType)
         }
@@ -189,71 +173,6 @@ extension PHAsset {
         CGImageDestinationAddImageFromSource(destination, imageRef, 0, (properties as CFDictionary))
         CGImageDestinationFinalize(destination)
         return dataWithEXIF as Data
-    }
-
-    static func exportSlowmo(composition: AVComposition, date: Date?) async throws -> URL? {
-        NSLog("%@", "Exporting compositional video")
-        // Slo-mo video - https://buffer.com/resources/slow-motion-video-ios/
-        // TODO this generates inconsistent content hashes per-platform.
-        guard let export = AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetHighestQuality) else {
-            throw AssetError.fetch("Can't start export session", nil)
-        }
-        let filename = UUID().uuidString + ".m4v"
-        let tempFile = await SyncManager.tempDir.appendingPathComponent(filename, isDirectory: false)
-        export.outputURL = tempFile
-        export.outputFileType = .m4v
-        export.shouldOptimizeForNetworkUse = true
-        export.metadata = Self.dateMetadata(for: date)
-
-        await export.export()
-        switch export.status {
-        case .completed:
-            return tempFile
-        default:
-            throw AssetError.fetch("Can't export video", nil)
-        }
-    }
-
-    static func setDate(onAsset asset: AVURLAsset, date: Date?, timezone: TimeZone?) async throws -> URL? {
-        guard let date else { return nil }
-
-        for format in try await asset.load(.availableMetadataFormats) {
-            let metadata = try await asset.loadMetadata(for: format)
-            NSLog("metadata for \(asset.url)")
-            for m in metadata {
-                print("***\(String(describing: m.keySpace)) \(String(describing: m.key)) \(String(describing: try await m.load(.value)))")
-            }
-        }
-
-        for m in try await asset.load(.commonMetadata) {
-            print("*** -> \(String(describing: m.keySpace)) \(String(describing: m.key)) \(String(describing: try await m.load(.value)))")
-            print(String(describing: m))
-        }
-
-        let tempFile = await SyncManager.tempDir.appendingPathComponent(asset.url.lastPathComponent, isDirectory: false)
-        guard let export = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetPassthrough) else {
-            throw AssetError.fetch("Can't start export session", nil)
-        }
-
-        print("*** -- track ")
-        for m in try await asset.load(.tracks).first?.load(.metadata) ?? [] {
-            print("*** -> \(String(describing: m.keySpace)) \(String(describing: m.key)) \(String(describing: try await m.load(.value)))")
-            print(String(describing: m))
-        }
-
-        export.outputURL = tempFile
-        export.outputFileType = .mov
-        export.shouldOptimizeForNetworkUse = true
-        export.metadata = Self.dateMetadata(for: date)
-        await export.export()
-        switch export.status {
-        case .completed:
-            NSLog("*** output \(tempFile)")
-            return tempFile
-        default:
-            NSLog("Failed to set date: \(String(describing: export.error))")
-            return nil
-        }
     }
 
     static func dateMetadata(for date: Date?) -> [AVMetadataItem]? {

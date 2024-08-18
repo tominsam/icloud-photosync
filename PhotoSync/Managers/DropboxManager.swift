@@ -24,6 +24,7 @@ class DropboxManager: Manager {
         // If the cursor is nil, we've never fetched a page, get the first page as a bootstrap
         if cursor == nil {
             NSLog("%@", "Dropbox cursor is missing or invalid - resetting local sync state")
+            await state.updateTotal(to: 0)
 
             // We don't have an existing cursor for this. First remove everything
             try await DropboxFile.deleteAll(in: context)
@@ -77,7 +78,7 @@ class DropboxManager: Manager {
         NSLog("%@", "Inserting / updating \(fileMetadata.count) file(s), deleting \(deletedMetadata.count) file(s)")
         let context = persistentContainer.newBackgroundContext()
         try await DropboxFile.insertOrUpdate(fileMetadata, delete: deletedMetadata, into: context)
-        await state.setComplete()
+        await state.increment(listResult.entries.count)
     }
 
 }

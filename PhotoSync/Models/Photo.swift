@@ -13,7 +13,6 @@ public class Photo: NSManagedObject, ManagedObject {
 
     // Properties from photokit
     @NSManaged public var photoKitId: String!
-    @NSManaged public var cloudIdentifier: String!
     @NSManaged public var created: Date?
     @NSManaged public var modified: Date?
 
@@ -34,21 +33,19 @@ public class Photo: NSManagedObject, ManagedObject {
 
 public extension Photo {
     @discardableResult
-    static func insertOrUpdate(_ assets: [PHAsset], into context: NSManagedObjectContext) async throws -> [Photo] {
-        guard !assets.isEmpty else { return [] }
-
-        let cloudIdentifiers = PHPhotoLibrary.shared().cloudIdentifierMappings(forLocalIdentifiers: assets.map { $0.localIdentifier })
+    static func insertOrUpdate(_ assets: [PHAsset], into context: NSManagedObjectContext) async throws -> ([Photo], Bool) {
+        guard !assets.isEmpty else { return ([], false) }
 
         let existing = try await Photo.matching("photoKitId IN (%@)", args: [assets.map { $0.localIdentifier }], in: context).uniqueBy(\.photoKitId)
-        return assets.map { asset in
+        var changed = false
+        let photos = assets.map { asset in
             let photo = existing[asset.localIdentifier] ?? context.performAndWait { context.insertObject() }
-            if case .success(let ci) = cloudIdentifiers[asset.localIdentifier] {
-                photo.update(from: asset, cloudIdentifier: ci)
-            } else {
-                print("no")
+            if photo.update(from: asset) {
+                changed = true
             }
             return photo
         }
+        return (photos, changed)
     }
 
     static func forLocalIdentifier(_ localIdentifier: String, in context: NSManagedObjectContext) async throws -> Photo? {
@@ -57,7 +54,6 @@ public extension Photo {
 
     struct PhotoMapping {
         let photoKitId: String
-        let cloudIdentifier: String
         let path: String
         let contentHash: String?
     }
@@ -88,29 +84,38 @@ public extension Photo {
             // filename until we get something unique. Remember that files systems are
             // often not case sensitive!
             var path = photo.preferredPath!
-            while allAssignedPaths.contains(path) {
+            while allAssignedPaths.contains(path.lowercased()) {
                 path = path.incrementFilenameMagicNumber()
             }
-            allAssignedPaths.insert(path)
-            return PhotoMapping(photoKitId: photo.photoKitId, cloudIdentifier: photo.cloudIdentifier, path: path, contentHash: photo.contentHash)
+            allAssignedPaths.insert(path.lowercased())
+            return PhotoMapping(photoKitId: photo.photoKitId, path: path, contentHash: photo.contentHash)
         }
     }
 
-    private func update(from asset: PHAsset, cloudIdentifier: PHCloudIdentifier) {
-        photoKitId = asset.localIdentifier
-        created = asset.creationDate
-        self.cloudIdentifier = cloudIdentifier.stringValue
-        if modified != asset.modificationDate {
+    private func update(from asset: PHAsset) -> Bool {
+        var changed = false
+
+        if photoKitId != asset.localIdentifier || created != asset.creationDate {
+            photoKitId = asset.localIdentifier
+            created = asset.creationDate
+            changed = true
+        }
+
+        if modified == nil || asset.modificationDate == nil || abs(modified!.timeIntervalSinceReferenceDate - asset.modificationDate!.timeIntervalSinceReferenceDate) > 20 {
             // if the file has been changed, invalidate the content hash
-            // and the path (because you can change the date on photos)
+            // and the path (because you can change the date on photos, and
+            // even though we're exporting the original, we're changing the exif
+            // date if it's been edited)
             filename = nil
             contentHash = nil
             preferredPath = nil
             modified = asset.modificationDate
+            changed = true
         }
 
         if filename == nil {
-            filename = asset.filename // slow!
+            filename = asset.filename?.stripFilenameMagicNumber() // slow!
+            changed = true
         }
 
         // We're storing a path for the image in core data rather than deriving it every time, because
@@ -118,13 +123,30 @@ public extension Photo {
         // consistent for every run of the app.
         if let filename = filename, preferredPath == nil {
             preferredPath = asset.dropboxPath(fromFilename: filename)
+            changed = true
         }
-
+        return changed
     }
 }
 
 extension String {
     static let trailingDigit = try! NSRegularExpression(pattern: #"^(.*)\s\((\d+)\)$"#, options: [])
+
+    func stripFilenameMagicNumber() -> String {
+        // Cut the filename into a path, the filename without extension, and the extension
+        let prefix = (self as NSString).deletingLastPathComponent
+        var filename = ((self as NSString).deletingPathExtension as NSString).lastPathComponent
+        let pathExtension = (self as NSString).pathExtension
+
+        // Look for an existing " (1)" at the end of the filename and extract it if present
+        if let match = Self.trailingDigit.firstMatch(in: filename, options: [], range: NSRange(filename.startIndex ..< filename.endIndex, in: filename)) {
+            let filenameRange = Range(match.range(at: 1), in: filename)!
+            filename = String(filename[filenameRange])
+        }
+
+        // Glue the path back together
+        return ((prefix as NSString).appendingPathComponent(filename) as NSString).appendingPathExtension(pathExtension.lowercased())!
+    }
 
     func incrementFilenameMagicNumber() -> String {
         // Cut the filename into a path, the filename without extension, and the extension
@@ -148,6 +170,6 @@ extension String {
         let suffix = " (\(index + 1))"
 
         // Glue the path back together
-        return ((prefix as NSString).appendingPathComponent(filename + suffix) as NSString).appendingPathExtension(pathExtension)!
+        return ((prefix as NSString).appendingPathComponent(filename + suffix) as NSString).appendingPathExtension(pathExtension.lowercased())!
     }
 }

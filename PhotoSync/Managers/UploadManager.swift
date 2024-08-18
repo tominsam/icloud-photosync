@@ -24,20 +24,20 @@ class UploadManager: Manager {
         var deletionState = await stateManager.createState(named: "Deleted", total: deletions.count)
 
         // prioritize new files
-        await uploads.chunked(into: 10).parallelMap(maxJobs: 3) { chunk in
+        await uploads.chunked(into: 10).parallelMap(maxJobs: 2) { chunk in
             await uploadState.increment(chunk.count)
             await self.upload(chunk)
         }
         await uploadState.setComplete()
 
         // then upload changed files
-        await replacements.chunked(into: 10).parallelMap(maxJobs: 3) { chunk in
+        await replacements.chunked(into: 10).parallelMap(maxJobs: 2) { chunk in
             await replacementState.increment(chunk.count)
             await self.upload(chunk)
         }
         await replacementState.setComplete()
 
-        await unknown.chunked(into: 10).parallelMap(maxJobs: 3) { chunk in
+        await unknown.chunked(into: 10).parallelMap(maxJobs: 2) { chunk in
             await unknownState.increment(chunk.count)
             await self.upload(chunk)
         }
@@ -102,7 +102,7 @@ class UploadManager: Manager {
             } else {
                 state = .replacement
             }
-            uploads.append(BatchUploader.UploadTask(asset: asset, filename: photo.path, existingContentHash: file?.contentHash, cloudIdentifier: photo.cloudIdentifier, state: state))
+            uploads.append(BatchUploader.UploadTask(asset: asset, filename: photo.path, existingContentHash: file?.contentHash, state: state))
         }
 
         // Anything left in the dropbox files list needs to be deleted,

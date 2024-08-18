@@ -24,8 +24,6 @@ class PhotoKitManager: Manager {
     var allAssets: [PHAsset] = []
 
     func sync() async throws {
-        let start = DispatchTime.now()
-
         let context = persistentContainer.newBackgroundContext()
         let count = Photo.count(in: context)
         var state = await stateManager.createState(named: "Local photos", total: count)
@@ -46,7 +44,6 @@ class PhotoKitManager: Manager {
          photos from my local library, where I get about 15k photos per second written into the data store.
          */
 
-        NSLog("%@", "Getting photos")
         allAssets = await PHAsset.allAssets
 
         // First sync is slow because we have no photo paths, and those are expensive,
@@ -57,8 +54,10 @@ class PhotoKitManager: Manager {
 
         for chunk in allAssets.chunked(into: fetchSize) {
             await state.increment(chunk.count)
-            try await Photo.insertOrUpdate(chunk, into: context)
-            try await context.performSave(andReset: true)
+            let (_, changed) = try await Photo.insertOrUpdate(chunk, into: context)
+            if changed {
+                try await context.performSave(andReset: true)
+            }
         }
 
         let deleteMe: Set<String> = Set(
@@ -75,8 +74,6 @@ class PhotoKitManager: Manager {
         }
         try await context.performSave(andReset: true)
 
-        let duration = Double(DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds) / 1_000_000_000
-        NSLog("Synced %d photos in %0.1f seconds (%.0f per second)", allAssets.count, duration, Double(allAssets.count) / duration)
         await state.setComplete()
     }
 }
