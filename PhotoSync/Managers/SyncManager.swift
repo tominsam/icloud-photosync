@@ -201,4 +201,17 @@ class SyncManager: ObservableObject {
         }
         UIApplication.shared.isIdleTimerDisabled = false
     }
+
+    func connectToDropbox() {
+        let scopeRequest = ScopeRequest(
+            scopeType: .user,
+            scopes: ["files.metadata.read", "files.content.write"],
+            includeGrantedScopes: false)
+        DropboxClientsManager.authorizeFromControllerV2(
+            UIApplication.shared,
+            controller: UIApplication.shared.delegate?.window??.rootViewController,
+            loadingStatusDelegate: nil,
+            openURL: { UIApplication.shared.open($0, options: [:], completionHandler: nil) },
+            scopeRequest: scopeRequest)
+    }
 }

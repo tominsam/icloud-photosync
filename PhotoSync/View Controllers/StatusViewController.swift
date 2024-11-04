@@ -77,7 +77,7 @@ struct StatusView: View {
                     }
                 } else {
                     Button("Connect to Dropbox") {
-                        // TODO
+                        syncManager.connectToDropbox()
                     }
                 }
             }

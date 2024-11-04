@@ -25,29 +25,29 @@ class UploadManager: Manager {
 
         // prioritize new files
         await uploads.chunked(into: 10).parallelMap(maxJobs: 2) { chunk in
-            await uploadState.increment(chunk.count)
             await self.upload(chunk)
+            await uploadState.increment(chunk.count)
         }
         await uploadState.setComplete()
 
         // then upload changed files
         await replacements.chunked(into: 10).parallelMap(maxJobs: 2) { chunk in
-            await replacementState.increment(chunk.count)
             await self.upload(chunk)
+            await replacementState.increment(chunk.count)
         }
         await replacementState.setComplete()
 
         await unknown.chunked(into: 10).parallelMap(maxJobs: 2) { chunk in
-            await unknownState.increment(chunk.count)
             await self.upload(chunk)
+            await unknownState.increment(chunk.count)
         }
         await unknownState.setComplete()
 
         // then delete removed files (don't need parallel here, the server
         // batch call is fast enough).
         for chunk in deletions.chunked(into: 400) {
-            await uploadState.increment(chunk.count)
             await self.delete(chunk)
+            await uploadState.increment(chunk.count)
         }
         await deletionState.setComplete()
 

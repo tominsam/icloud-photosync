@@ -105,8 +105,14 @@ extension PHAsset {
                     continuation.resume(returning: data)
                 }
             }
-            let dataWithExif = await Self.setDate(onImage: data, date: self.creationDate, timezone: self.timezone)
-            return .data(dataWithExif, hash: dataWithExif.dropboxContentHash())
+
+            // This isn't consistent across platform, which means I can't use contenthash
+            // for sync. I have to upload something that I can hold constant across platform
+            // for the core concept to work.
+            //let dataWithExif = await Self.setDate(onImage: data, date: self.creationDate, timezone: self.timezone)
+            //return .data(dataWithExif, hash: dataWithExif.dropboxContentHash())
+
+            return .data(data, hash: data.dropboxContentHash())
 
         case .video:
             let avAsset = try await manager.getAVAsset(for: self)
@@ -119,95 +125,95 @@ extension PHAsset {
         }
     }
 
-    static func setDate(onImage data: Data, date: Date?, timezone: TimeZone?) async -> Data {
-        guard let date else { return data }
-
-        // If an image date has been edited in iPhoto, we're going to write the image
-        // in a folder with that edited date, and with an mtime of that edited date, but
-        // it _also_ needs the edited date in the EXIF so that things that import it
-        // (and the dropbox photos view) understand that it's at the time we claim it's
-        // at. The "edited image" export from photokit has the original EXIF, without
-        // the new date, so we need to fix that.
-
-        // Read image
-        let imageRef: CGImageSource = CGImageSourceCreateWithData((data as CFData), nil)!
-
-        // Read exif, extract existing timezone offset from image
-        let oldProperties = CGImageSourceCopyPropertiesAtIndex(imageRef, 0, nil) as? [String: AnyObject]
-        let oldExif = oldProperties?[kCGImagePropertyExifDictionary as String] as? [String: AnyObject]
-        let oldOffset = oldExif?["OffsetTimeOriginal"] as? String
-        let oldTimezone = oldOffset != nil ? TimeZone(fromOffset: oldOffset!) : nil
-
-        let dateFormatter = DateFormatter()
-        // yes, colons. EXIF gonna EXIF.
-        dateFormatter.dateFormat = "yyyy:MM:dd HH:mm:ss"
-        // Guess timezone from GPS first, fall back to respecting any existing timezone on the image
-        dateFormatter.timeZone = timezone ?? oldTimezone
-        let dateString = dateFormatter.string(from: date)
-
-        // There's an unofficial place to put offset in EXIF, let's do that
-        dateFormatter.dateFormat = "xxxxx" // -07:00
-        let offsetString = dateFormatter.string(from: date)
-
-        // Build new exif properties for image
-        let exifDictionary: [NSString: AnyObject] = [
-            "DateTimeOriginal": dateString as CFString,
-            "SubSecDateTimeOriginal": kCFNull,
-            "OffsetTimeOriginal": offsetString as CFString,
-        ]
-        let properties: [NSString: AnyObject] = [
-            kCGImagePropertyExifDictionary: exifDictionary as CFDictionary
-        ]
-
-        // Write out a new data object with updated exif
-        let uti: CFString = CGImageSourceGetType(imageRef)!
-        let dataWithEXIF: NSMutableData = NSMutableData(data: data)
-        if ["org.webmproject.webp"].contains(uti as NSString) {
-            return data
-        }
-
-        guard let destination: CGImageDestination = CGImageDestinationCreateWithData((dataWithEXIF as CFMutableData), uti, 1, nil) else {
-            NSLog("!! Failed to write exif to data")
-            return data
-        }
-        CGImageDestinationAddImageFromSource(destination, imageRef, 0, (properties as CFDictionary))
-        CGImageDestinationFinalize(destination)
-        return dataWithEXIF as Data
-    }
-
-    static func dateMetadata(for date: Date?) -> [AVMetadataItem]? {
-        guard let date else { return nil }
-        let dates = [
-            (AVMetadataKeySpace.common, AVMetadataKey.commonKeyCreationDate),
-            (.common, .commonKeyLastModifiedDate),
-            (.quickTimeMetadata, .quickTimeMetadataKeyCreationDate),
-            (.quickTimeUserData, .quickTimeUserDataKeyCreationDate),
-            (.isoUserData, .isoUserDataKeyDate),
-            (.id3, .id3MetadataKeyDate),
-        ].map { keySpace, key in
-            let dateMetadata = AVMutableMetadataItem()
-            dateMetadata.keySpace = keySpace
-            dateMetadata.key = key as NSString
-            dateMetadata.dataType = kCMMetadataBaseDataType_UTF8 as String
-            dateMetadata.value = "1970-02-01T10:59:43-0800" as NSString // Date(timeIntervalSince1970: 1000) as NSDate?
-            assert(dateMetadata.dateValue != nil)
-            return dateMetadata
-        }
-
-        let moreDates = [
-            AVMetadataIdentifier.commonIdentifierCreationDate,
-            .quickTimeMetadataCreationDate
-        ].map { identifier in
-            let dateMetadata = AVMutableMetadataItem()
-            dateMetadata.identifier = identifier
-            dateMetadata.dataType = kCMMetadataBaseDataType_UTF8 as String
-            dateMetadata.value = "1970-02-01T10:59:43-0800" as NSString // Date(timeIntervalSince1970: 1000) as NSDate?
-            assert(dateMetadata.dateValue != nil)
-            return dateMetadata
-        }
-
-        return dates + moreDates
-    }
+//    static func setDate(onImage data: Data, date: Date?, timezone: TimeZone?) async -> Data {
+//        guard let date else { return data }
+//
+//        // If an image date has been edited in iPhoto, we're going to write the image
+//        // in a folder with that edited date, and with an mtime of that edited date, but
+//        // it _also_ needs the edited date in the EXIF so that things that import it
+//        // (and the dropbox photos view) understand that it's at the time we claim it's
+//        // at. The "edited image" export from photokit has the original EXIF, without
+//        // the new date, so we need to fix that.
+//
+//        // Read image
+//        let imageRef: CGImageSource = CGImageSourceCreateWithData((data as CFData), nil)!
+//
+//        // Read exif, extract existing timezone offset from image
+//        let oldProperties = CGImageSourceCopyPropertiesAtIndex(imageRef, 0, nil) as? [String: AnyObject]
+//        let oldExif = oldProperties?[kCGImagePropertyExifDictionary as String] as? [String: AnyObject]
+//        let oldOffset = oldExif?["OffsetTimeOriginal"] as? String
+//        let oldTimezone = oldOffset != nil ? TimeZone(fromOffset: oldOffset!) : nil
+//
+//        let dateFormatter = DateFormatter()
+//        // yes, colons. EXIF gonna EXIF.
+//        dateFormatter.dateFormat = "yyyy:MM:dd HH:mm:ss"
+//        // Guess timezone from GPS first, fall back to respecting any existing timezone on the image
+//        dateFormatter.timeZone = timezone ?? oldTimezone
+//        let dateString = dateFormatter.string(from: date)
+//
+//        // There's an unofficial place to put offset in EXIF, let's do that
+//        dateFormatter.dateFormat = "xxxxx" // -07:00
+//        let offsetString = dateFormatter.string(from: date)
+//
+//        // Build new exif properties for image
+//        let exifDictionary: [NSString: AnyObject] = [
+//            "DateTimeOriginal": dateString as CFString,
+//            "SubSecDateTimeOriginal": kCFNull,
+//            "OffsetTimeOriginal": offsetString as CFString,
+//        ]
+//        let properties: [NSString: AnyObject] = [
+//            kCGImagePropertyExifDictionary: exifDictionary as CFDictionary
+//        ]
+//
+//        // Write out a new data object with updated exif
+//        let uti: CFString = CGImageSourceGetType(imageRef)!
+//        let dataWithEXIF: NSMutableData = NSMutableData(data: data)
+//        if ["org.webmproject.webp"].contains(uti as NSString) {
+//            return data
+//        }
+//
+//        guard let destination: CGImageDestination = CGImageDestinationCreateWithData((dataWithEXIF as CFMutableData), uti, 1, nil) else {
+//            NSLog("!! Failed to write exif to data")
+//            return data
+//        }
+//        CGImageDestinationAddImageFromSource(destination, imageRef, 0, (properties as CFDictionary))
+//        CGImageDestinationFinalize(destination)
+//        return dataWithEXIF as Data
+//    }
+//
+//    static func dateMetadata(for date: Date?) -> [AVMetadataItem]? {
+//        guard let date else { return nil }
+//        let dates = [
+//            (AVMetadataKeySpace.common, AVMetadataKey.commonKeyCreationDate),
+//            (.common, .commonKeyLastModifiedDate),
+//            (.quickTimeMetadata, .quickTimeMetadataKeyCreationDate),
+//            (.quickTimeUserData, .quickTimeUserDataKeyCreationDate),
+//            (.isoUserData, .isoUserDataKeyDate),
+//            (.id3, .id3MetadataKeyDate),
+//        ].map { keySpace, key in
+//            let dateMetadata = AVMutableMetadataItem()
+//            dateMetadata.keySpace = keySpace
+//            dateMetadata.key = key as NSString
+//            dateMetadata.dataType = kCMMetadataBaseDataType_UTF8 as String
+//            dateMetadata.value = "1970-02-01T10:59:43-0800" as NSString // Date(timeIntervalSince1970: 1000) as NSDate?
+//            assert(dateMetadata.dateValue != nil)
+//            return dateMetadata
+//        }
+//
+//        let moreDates = [
+//            AVMetadataIdentifier.commonIdentifierCreationDate,
+//            .quickTimeMetadataCreationDate
+//        ].map { identifier in
+//            let dateMetadata = AVMutableMetadataItem()
+//            dateMetadata.identifier = identifier
+//            dateMetadata.dataType = kCMMetadataBaseDataType_UTF8 as String
+//            dateMetadata.value = "1970-02-01T10:59:43-0800" as NSString // Date(timeIntervalSince1970: 1000) as NSDate?
+//            assert(dateMetadata.dateValue != nil)
+//            return dateMetadata
+//        }
+//
+//        return dates + moreDates
+//    }
 
     static var allAssets: [PHAsset] {
         get async {

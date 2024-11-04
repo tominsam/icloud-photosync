@@ -18,7 +18,7 @@ class BatchUploader: LoggingOperation {
     enum UploadState {
         // File is not in dropbox
         case new
-        // File is in dropbox, local hash is different
+        // File is in dropbox, local hash is diffrent
         case replacement
         // File is in dropbox, local hash is nil
         case unknown
@@ -114,14 +114,13 @@ class BatchUploader: LoggingOperation {
         }
 
         guard !uploadResults.isEmpty else {
-            NSLog("%@", "Skipped all files for chunk")
             return []
         }
 
-        if uploadResults.count < tasks.count {
-            NSLog("%@", "Skipped \(tasks.count - uploadResults.count) file(s)")
-        }
-
+//        if uploadResults.count < tasks.count {
+//            NSLog("%@", "Skipped \(tasks.count - uploadResults.count) file(s)")
+//        }
+//
         await uploadState.setComplete()
 
         do {
