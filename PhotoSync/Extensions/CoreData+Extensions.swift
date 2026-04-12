@@ -6,7 +6,7 @@
 //  Copyright © 2020 Thomas Insam. All rights reserved.
 //
 
-import CoreData
+@preconcurrency import CoreData
 
 extension NSManagedObjectContext {
     func insertObject<A: NSManagedObject>() -> A {

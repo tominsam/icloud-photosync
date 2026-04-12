@@ -8,7 +8,7 @@
 
 import CoreData
 import Foundation
-import SwiftyDropbox
+@preconcurrency import SwiftyDropbox
 
 @objc(DropboxFile)
 public class DropboxFile: NSManagedObject, ManagedObject {

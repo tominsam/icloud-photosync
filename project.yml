@@ -18,7 +18,7 @@ targets:
     name: PhotoSync
     type: application
     platform: iOS
-    deploymentTarget: "16.0"
+    deploymentTarget: "26.1"
     scheme: {}
     settings:
       base:
@@ -31,6 +31,7 @@ targets:
     sources:
       - path: "PhotoSync"
         name: "Code"
+        type: syncedFolder
       - path: "README.md"
         buildPhase: none
       - path: "CHANGELOG.md"
