@@ -3,16 +3,15 @@
 import Foundation
 import CoreData
 
-class Database {
-    private(set) lazy var persistentContainer: NSPersistentContainer = {
+actor Database {
+    private(set) var persistentContainer: NSPersistentContainer
+
+    init() {
         var persistentContainer: NSPersistentContainer?
         Self.loadPersistentContainer { container in
             persistentContainer = container
         }
-        return persistentContainer!
-    }()
-
-    init() {
+        self.persistentContainer = persistentContainer!
     }
     
     func perform<Result>(block: @escaping @Sendable (NSManagedObjectContext) throws -> Result) async rethrows -> Result {

@@ -30,9 +30,15 @@ struct StateLabel: View {
 private extension TaskProgress {
     var stringState: String {
         if complete {
-            return "Complete (\(total))"
-        } else {
+            if let total {
+                return "Complete (\(total))"
+            } else {
+                return "Complete"
+            }
+        } else if let total {
             return "\(progress) / \(total)"
+        } else {
+            return "\(progress) / …"
         }
     }
 
@@ -40,15 +46,16 @@ private extension TaskProgress {
         if complete {
             return 1
         }
-        if total == 0 {
+        if total == 0 || total == nil {
             return nil
         }
-        return Double(progress) / Double(total)
+        return Double(progress) / Double(total ?? 1)
     }
 }
 
 #Preview {
     VStack {
+        StateLabel(leading: "State", state: makeState(5, total: nil))
         StateLabel(leading: "State", state: makeState(1))
         StateLabel(leading: "State", state: makeState(5))
         StateLabel(leading: "State", state: makeState(10))
@@ -57,8 +64,12 @@ private extension TaskProgress {
 }
 
 @MainActor
-private func makeState(_ progress: Int, complete: Bool = false) -> TaskProgress {
-    var state = ProgressManager(notify: { _ in }).createTask(named: "Demo", total: 10)
+private func makeState(
+    _ progress: Int,
+    total: Int? = 10,
+    complete: Bool = false
+) -> TaskProgress {
+    let state = ProgressManager().createTask(named: "Demo", total: total)
     state.progress = progress
     if complete {
         state.setComplete()

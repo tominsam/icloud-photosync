@@ -6,7 +6,8 @@ import SwiftyDropbox
 struct PhotoSyncApp: App {
     @Environment(\.scenePhase) private var scenePhase
 
-    @StateObject private var syncCoordinator = SyncCoordinator(database: Database())
+    let syncCoordinator = SyncCoordinator(database: Database())
+
     @State private var errorMessage: String?
 
     init() {

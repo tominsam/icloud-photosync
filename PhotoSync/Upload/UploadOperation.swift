@@ -9,6 +9,7 @@ import UIKit
 // Upload bundles of assets to dropbox at once - this is much much faster than uploading individually,
 // even though it's much more complicated, because Dropbox has internal transaction / locking that effectively
 // prevent me uploading more than one file at once.
+@MainActor
 class UploadOperation {
     enum UploadState {
         // File is not in dropbox
@@ -37,88 +38,93 @@ class UploadOperation {
         case failure(path: String, message: String, error: Error?)
     }
 
-    static func batchUpload(database: Database, dropboxClient: DropboxClient, tasks: [UploadTask], progressManager: ProgressManager) async -> [FinishResult] {
-        var fetchState = progressManager.createTask(named: "Fetch chunk", total: tasks.count)
+    static var batchNumber = 0
+    
+    static func batchUpload(
+        database: Database,
+        dropboxClient: DropboxClient,
+        tasks: [UploadTask],
+        progressManager: ProgressManager
+    ) async -> [FinishResult] {
+        // Create as a pair so they're next to each other
+        batchNumber += 1
+        let fetchState = progressManager.createTask(named: "Fetch chunk \(batchNumber)", total: tasks.count)
+        let uploadState = progressManager.createTask(named: "Upload chunk \(batchNumber)", total: tasks.count)
         defer {
-            Task {
-                fetchState.remove()
-            }
+            fetchState.remove()
+            uploadState.remove()
         }
 
         // Download all the images, one at a time, in advance.
-        let data = await tasks.asyncMap {
+        let assetDatas: [AssetData] = await tasks.asyncMap { task in
             fetchState.progress += 1
-            return await download(database: database, asset: $0.asset)
+            let data = await download(database: database, asset: task.asset)
+            if data.hash != nil && task.existingContentHash == data.hash {
+                // This means that we've uploaded it before, in another install or whatever -
+                // the db hash equals the newly-calculated file hash, and we can skip it.
+                // Updating the total here looks nicer, because the "upload" task total falls
+                // as we fetch and verify the image contents.
+                uploadState.total! -= 1
+            }
+            return data
         }
         fetchState.setComplete()
-
-        var uploadState = progressManager.createTask(named: "Upload chunk", total: tasks.count)
-        defer {
-            Task {
-                uploadState.remove()
-            }
-        }
-
+        
         // concurrently upload all the files
-        let uploadResults = await withTaskGroup(of: UploadResult.self) { group -> [UploadResult] in
-            for (task, data) in zip(tasks, data) {
-                if data.hash != nil && task.existingContentHash == data.hash {
-                    // This means that we've uploaded it before, in another install or whatever -
-                    // the db hash equals the newly-calculated file hash, and we can skip it.
-                    uploadState.total -= 1
-                    continue
-                }
-                group.addTask {
-                    let uploadSession: Files.UploadSessionFinishArg
-                    do {
-                        switch data {
-                        case let .data(data, hash):
-                            uploadSession = try await uploadData(
-                                dropboxClient: dropboxClient,
-                                filename: task.filename,
-                                date: task.asset.creationDate ?? task.asset.modificationDate,
-                                contentHash: hash,
-                                data: data)
-                        case .url(let url, let hash), .tempUrl(let url, let hash):
-                            uploadSession = try await uploadUrl(
-                                dropboxClient: dropboxClient,
-                                filename: task.filename,
-                                date: task.asset.creationDate ?? task.asset.modificationDate,
-                                contentHash: hash,
-                                url: url)
-                        case .failure(let error):
-                            throw error
-                        }
-                        if case .tempUrl(let url, _) = data {
-                            // We exported a video to a temp file, let's clean that up
-                            try? FileManager.default.removeItem(at: url)
-                        }
-                    } catch {
-                        uploadState.progress += 1
-                        return .failure(path: task.filename, message: error.localizedDescription, error: error)
-                    }
-                    uploadState.progress += 1
-                    return .success(task.filename, uploadSession)
-                }
+        //let uploadResults = await withTaskGroup(of: UploadResult.self) { group -> [UploadResult] in
+        var uploadResults = [UploadResult]()
+        for (task, assetData) in zip(tasks, assetDatas) {
+            if assetData.hash != nil && task.existingContentHash == assetData.hash {
+                // This means that we've uploaded it before, in another install or whatever -
+                // the db hash equals the newly-calculated file hash, and we can skip it.
+                continue
             }
-            var output = [UploadResult]()
-            for await value in group {
-                output.append(value)
+            let uploadSession: Files.UploadSessionFinishArg
+            do {
+                switch assetData {
+                case let .data(data, hash):
+                    uploadSession = try await uploadData(
+                        dropboxClient: dropboxClient,
+                        filename: task.filename,
+                        date: task.asset.creationDate ?? task.asset.modificationDate,
+                        contentHash: hash,
+                        data: data)
+                case .url(let url, let hash), .tempUrl(let url, let hash):
+                    uploadSession = try await uploadUrl(
+                        dropboxClient: dropboxClient,
+                        filename: task.filename,
+                        date: task.asset.creationDate ?? task.asset.modificationDate,
+                        contentHash: hash,
+                        url: url)
+                case .failure(let error):
+                    throw error
+                }
+                if case .tempUrl(let url, _) = assetData {
+                    // We exported a video to a temp file, let's clean that up
+                    try? FileManager.default.removeItem(at: url)
+                }
+                uploadState.progress += 1
+                uploadResults.append(
+                    .success(task.filename, uploadSession)
+                )
+            } catch {
+                uploadState.progress += 1
+                uploadResults.append(
+                    .failure(path: task.filename, message: error.localizedDescription, error: error)
+                )
             }
-            return output
         }
-
+        
         guard !uploadResults.isEmpty else {
+            // We didn't have to upload anything in this batch (happens a lot, if
+            // we had to invalidate photo hashes for instance.)
             return []
         }
-
-//        if uploadResults.count < tasks.count {
-//            NSLog("%@", "Skipped \(tasks.count - uploadResults.count) file(s)")
-//        }
-//
-        uploadState.setComplete()
-
+        
         do {
+            // Batched dropbox uploads work by uploading several files, then a "finish" call
+            // adds them all to the dropbox. We have to work like this or it's trivially easy
+            // to hit the upload rate limit.
             return try await finish(dropboxClient: dropboxClient, entries: uploadResults)
         } catch {
             return uploadResults.map { result -> FinishResult in
@@ -137,7 +143,7 @@ class UploadOperation {
     private static func download(database: Database, asset: PHAsset) async -> AssetData {
         // Get photo from photoKit. This is slow.
         do {
-            // this is the _final_ image data, including patched exif for edited files and videos
+            // this is the _final_ image data, including patched exif for edited files and videos.
             let data = try await asset.getImageData()
 
             // Store the content hash on the database object before we start the upload
@@ -261,3 +267,16 @@ class UploadOperation {
     }
 
 }
+
+func loggingDuration<R>(_ name: String, _ body: () async throws -> R) async rethrows -> R {
+    let startPoint = Date()
+    defer { NSLog("\(name): \(Date().timeIntervalSince(startPoint)) seconds") }
+    return try await body()
+}
+
+func loggingDuration<R>(_ name: String, _ body: () throws -> R) rethrows -> R {
+    let startPoint = Date()
+    defer { NSLog("\(name): \(Date().timeIntervalSince(startPoint)) seconds") }
+    return try body()
+}
+

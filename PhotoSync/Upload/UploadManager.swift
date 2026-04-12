@@ -35,20 +35,39 @@ class UploadManager {
     }
     
     func internalSync() async throws {
+        // Create all the state objects first so we update the UI.
+        
+        // new images that need to be uploaded
+        let uploadState = progressManager.createTask(named: "New")
+        // locally changed images need to be replaces
+        let replacementState = progressManager.createTask(named: "Updated")
+        // We don't have content hashes for these images, we'll need to fetch them from photokit
+        let unknownState = progressManager.createTask(named: "Unknown")
+        // removed locally, delete from dropbox. We do that _last_, only remove files once
+        // we've uploaded everything to minimize potential for loss
+        let deletionState = progressManager.createTask(named: "Deleted")
+
+        // this can take a few seconds for large libraries, but it's
+        // not worth trying to share with PhotoKitManager
         let allAssets = await PHAsset.allAssets
 
         let (changes, deletions) = try await database.perform { [self] context in
             try iterateAllPhotos(inContext: context, allAssets: allAssets)
         }
 
+        if deletions.count > 1000 {
+            // emergency sanity check to prevent the wrong login from destroying the server
+            fatalError("Too many deletions")
+        }
+
         let uploads = changes.filter { $0.state == .new }
         let replacements = changes.filter { $0.state == .replacement }
         let unknown = changes.filter { $0.state == .unknown }
 
-        var uploadState = progressManager.createTask(named: "New", total: uploads.count)
-        var replacementState = progressManager.createTask(named: "Updated", total: replacements.count)
-        var unknownState = progressManager.createTask(named: "Unknown", total: unknown.count)
-        var deletionState = progressManager.createTask(named: "Deleted", total: deletions.count)
+        uploadState.total = uploads.count
+        replacementState.total = replacements.count
+        unknownState.total = unknown.count
+        deletionState.total = deletions.count
 
         // prioritize new files
         await uploads.chunked(into: 10).parallelMap(maxJobs: 2) { chunk in
@@ -69,7 +88,7 @@ class UploadManager {
             unknownState.progress += chunk.count
         }
         unknownState.setComplete()
-
+        
         // then delete removed files (don't need parallel here, the server
         // batch call is fast enough).
         for chunk in deletions.chunked(into: 400) {
@@ -82,7 +101,12 @@ class UploadManager {
     }
 
     func upload(_ tasks: [UploadOperation.UploadTask]) async {
-        let finishResults = await UploadOperation.batchUpload(database: database, dropboxClient: dropboxClient, tasks: tasks, progressManager: progressManager)
+        let finishResults = await UploadOperation.batchUpload(
+            database: database,
+            dropboxClient: dropboxClient,
+            tasks: tasks,
+            progressManager: progressManager
+        )
         for result in finishResults {
             if case let .failure(path, message, error) = result {
                 recordError(message, path: path, error: error)
@@ -98,7 +122,10 @@ class UploadManager {
         }
     }
 
-    nonisolated func iterateAllPhotos(inContext context: NSManagedObjectContext, allAssets: [PHAsset]) throws -> ([UploadOperation.UploadTask], [DeleteOperation.DeleteTask]) {
+    nonisolated func iterateAllPhotos(
+        inContext context: NSManagedObjectContext,
+        allAssets: [PHAsset]
+    ) throws -> ([UploadOperation.UploadTask], [DeleteOperation.DeleteTask]) {
         let allPhotos = try Photo.allPhotosWithUniqueFilenames(in: context)
         let assets = allAssets.uniqueBy(\.localIdentifier)
         var dropboxFiles = try DropboxFile.matching(nil, in: context).uniqueBy(\.pathLower)

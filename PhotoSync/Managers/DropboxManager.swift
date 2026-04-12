@@ -34,12 +34,7 @@ class DropboxManager {
     }
     
     func internalSync() async throws {
-        // This is a guess, of course - we don't get a count from DB
-        // at any point, so the best number we have is "the last number"
-        let count = await database.perform { context in
-            DropboxFile.count(in: context)
-        }
-        var state = progressManager.createTask(named: "Dropbox", total: count)
+        var state = progressManager.createTask(named: "Dropbox", total: nil)
 
         // Try to resume a previous run if possible
         var cursor = try await database.perform { context in
@@ -49,12 +44,12 @@ class DropboxManager {
         // If the cursor is nil, we've never fetched a page, get the first page as a bootstrap
         if cursor == nil {
             NSLog("%@", "Dropbox cursor is missing or invalid - resetting local sync state")
-            state.total = 0
 
             // We don't have an existing cursor for this. First remove everything
             try await database.perform { context in
                 try DropboxFile.deleteAll(in: context)
             }
+            state.progress = 0
 
             // Now get the first page of results (DB has a cursor-based pagination API for
             // large results, and this is probably a large result). Path is "" - this isn't
@@ -67,6 +62,13 @@ class DropboxManager {
                 throw error
             }
             cursor = try await insertPage(listResult, state: &state)
+        } else {
+            // This is a guess, of course - we don't get a count from DB
+            // at any point, so the best number we have is "the last number"
+            let count = await database.perform { context in
+                DropboxFile.count(in: context)
+            }
+            state.progress = count
         }
         NSLog("Cursor is %@", String(describing: cursor))
 
@@ -99,7 +101,7 @@ class DropboxManager {
             try DropboxFile.insertOrUpdate(fileMetadata, delete: deletedMetadata, into: context)
             try SyncToken.insertOrUpdate(type: .dropboxListFolder, value: listResult.cursor as NSString, into: context)
         }
-        state.progress += listResult.entries.count
+        state.progress += fileMetadata.count
         return listResult.cursor
     }
 

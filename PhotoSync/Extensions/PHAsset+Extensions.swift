@@ -77,14 +77,14 @@ extension PHAsset {
             .originalFilename
     }
 
-    func getImageData() async throws -> AssetData {
+    func getImageData(version: PHImageRequestOptionsVersion = .original) async throws -> AssetData {
         let manager = PHImageManager.default()
 
         switch mediaType {
         case .image:
             let options = PHImageRequestOptions()
             options.deliveryMode = .highQualityFormat
-            options.version = .original // save out original
+            options.version = version
             options.isNetworkAccessAllowed = true // download if required
             options.isSynchronous = true // stay on thread for async simplicity
 

@@ -39,8 +39,7 @@ class PhotoKitManager {
     
     func internalSync() async throws {
         let count = await database.perform { Photo.count(in: $0) }
-        nonisolated(unsafe)
-        var state = progressManager.createTask(named: "Local photos", total: count)
+        let state = progressManager.createTask(named: "Local photos", total: count)
         let firstSync = count == 0
         
         /*

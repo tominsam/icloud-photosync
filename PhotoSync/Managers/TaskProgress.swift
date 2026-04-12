@@ -3,42 +3,39 @@
 import Foundation
 
 /// The progress of a single task. Mutating this will update listeners on the progressManager.
-struct TaskProgress: Identifiable, Sendable {
-
-    let name: String
+@Observable
+final class TaskProgress: Identifiable, @unchecked Sendable {
+    
     let id: UUID
+    let name: String
     
     /// Int progress towards the goal
-    var progress: Int = 0 { didSet {
-        notify(self)
-        if progress > total {
-            total = progress
-        }
-    }}
+    var progress: Int = 0
 
     /// The largest possible progress
-    var total: Int = 0 { didSet { notify(self) }}
+    var total: Int? = nil
 
     /// If true the task is complete
-    var complete: Bool = false { didSet { notify(self) }}
+    var complete: Bool = false
 
-    private let notify: @Sendable (TaskProgress) -> Void
-
-    fileprivate init(name: String, total: Int, notify: @escaping @Sendable (TaskProgress) -> Void) {
+    fileprivate init(
+        name: String,
+        total: Int?,
+    ) {
         self.id = UUID()
         self.name = name
         self.total = total
-        self.notify = notify
     }
 
     /// Calling this will remove the task from the manager
-    mutating func remove() {
+    func remove() {
         total = -1
     }
 
     /// Marks the task as complete
-    mutating func setComplete() {
+    func setComplete() {
         complete = true
+        total = max(progress, total ?? 0)
     }
 }
 
@@ -47,37 +44,31 @@ struct TaskProgress: Identifiable, Sendable {
 ///
 /// This design lets the UI show a list of all ongoing operations and for those operations to constantly update themselves and show
 /// progress towards the goal without needing a reference back to the UI.
-actor ProgressManager {
-    let notify: @MainActor ([TaskProgress]) -> Void
+@Observable
+@MainActor
+final class ProgressManager {
     var states: [TaskProgress] = []
-
-    init(notify: @escaping @MainActor ([TaskProgress]) -> Void) {
-        self.notify = notify
-    }
-
-    nonisolated func createTask(named name: String, total: Int = 0) -> TaskProgress {
-        let newState = TaskProgress(name: name, total: total, notify: { [weak self] state in
-            Task { await self?.updateTask(state) }
-        })
-        Task { await self.updateTask(newState) }
+    
+    init() {}
+    
+    func createTask(named name: String, total: Int? = nil) -> TaskProgress {
+        let newState = TaskProgress(name: name, total: total)
+        states.append(newState)
+        watchForRemoval(newState)
         return newState
     }
     
-    private func updateTask(_ state: TaskProgress) {
-        if state.total < 0 {
-            // state is finished
-            states.removeAll { $0.id == state.id }
-        } else if let index = states.firstIndex(where: { $0.id == state.id }) {
-            // update existing state
-            states[index] = state
-        } else {
-            // new state
-            states.append(state)
-        }
-        let states = self.states
-        DispatchQueue.main.async {
-            self.notify(states)
+    func watchForRemoval(_ progress: TaskProgress) {
+        withObservationTracking {
+            if let total = progress.total, total < 0 {
+                states.removeAll(where: { $0.id == progress.id })
+            }
+        } onChange: { [weak self] in
+            if (progress.total ?? 0) >= 0 {
+                Task { @MainActor in
+                    self?.watchForRemoval(progress)
+                }
+            }
         }
     }
-
 }

@@ -2,7 +2,6 @@ import SwiftUI
 
 struct StatusView: View {
 
-    @ObservedObject
     var syncCoordinator: SyncCoordinator
 
     @ViewBuilder

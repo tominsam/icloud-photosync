@@ -16,7 +16,8 @@ struct ServiceError: Identifiable, Sendable {
 }
 
 @MainActor
-class SyncCoordinator: ObservableObject {
+@Observable
+class SyncCoordinator {
     static let KeychainDropboxAccessToken = "KeychainDropboxAccessToken"
     private let keychain = KeychainSwift()
     
@@ -28,17 +29,12 @@ class SyncCoordinator: ObservableObject {
     let database: Database
     var backgroundTask: UIBackgroundTaskIdentifier?
     
-    @Published
     var isLoggedIn: Bool = false
-    @Published
-    var states: [TaskProgress] = []
-    @Published
     var errors: [ServiceError] = []
     
-    lazy var progressManager = ProgressManager(notify: { [weak self] newStates in
-        self?.states = newStates
-    })
-    
+    let progressManager = ProgressManager()
+    var states: [TaskProgress] { progressManager.states }
+
     private var dropboxClient: DropboxClient? {
         DropboxClientsManager.authorizedClient
     }
@@ -127,7 +123,7 @@ class SyncCoordinator: ObservableObject {
         }
         
         NSLog("%@", "Starting upload")
-        //await uploadManager.sync()
+        await uploadManager.sync()
         
         // resync dropbox at the end
         await dropboxManager.sync()
