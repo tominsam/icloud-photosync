@@ -4,6 +4,10 @@ import CoreData
 import Foundation
 import Photos
 
+/// Core data object representing a photo from PhotoKit. These are very cheap to fetch from
+/// the system - the DB object is here because some photo properties are _very_ expensive
+/// (for example the contentHash property requires us to download the original binary asset)
+/// so this table represents the most valuable data the app holds.
 @objc(Photo)
 public class Photo: NSManagedObject, ManagedObject {
     public static var defaultSortDescriptors = [
@@ -16,27 +20,36 @@ public class Photo: NSManagedObject, ManagedObject {
     @NSManaged public var created: Date?
     @NSManaged public var modified: Date?
 
-    // The filename of the image in PhotoKit. Expensive to calculate (because we
-    // need to fetch all representations of the photo)
+    // The filename of the image in PhotoKit. Slightly expensive to calculate
+    // (because we need to fetch all representations of the photo) so we
+    // cache it.
     @NSManaged public var filename: String?
 
     // The path we want the image to have on disk. Derived from photokit data
     // Doesn't need the original version to be downloaded to achieve this, but
-    // is a little expensive
+    // is a little more expensive to calculate than filename, so we cache it.
     @NSManaged public var preferredPath: String?
 
-    // The dropbox contenthash of the image. nil becaue we need the
+    // The dropbox contenthash of the image. Optional because we need the
     // image data to calculate this, so I'll only set it when I
     // have read the image.
     @NSManaged public var contentHash: String?
 }
 
 public extension Photo {
+    /// Inset a batch of PHAssets into the database, including calculating their filenames. If the
+    /// assets already exist we won't re-calculate the filename if the image is unchanged, so it's
+    /// much cheaper to call a second time.
     @discardableResult
     static func insertOrUpdate(_ assets: [PHAsset], into context: NSManagedObjectContext) throws -> ([Photo], Bool) {
         guard !assets.isEmpty else { return ([], false) }
+        // dict of photo ID -> photo of existing DB objects
+        let existing = try Photo.matching(
+            "photoKitId IN (%@)",
+            args: [assets.map { $0.localIdentifier }],
+            in: context
+        ).uniqueBy(\.photoKitId)
 
-        let existing = try Photo.matching("photoKitId IN (%@)", args: [assets.map { $0.localIdentifier }], in: context).uniqueBy(\.photoKitId)
         var changed = false
         let photos = assets.map { asset in
             let photo = existing[asset.localIdentifier] ?? context.insertObject()
@@ -58,16 +71,23 @@ public extension Photo {
         let contentHash: String?
     }
 
+    /// Returns an array containing every photo in the database, along with the _unique_
+    /// path into the destination that we want that photo to have. Photo filenames are
+    /// in folders by month, and take the filename from Photos.app, but filenames in there
+    /// are not guaranteed to be unique (especially for imports) so collisions will happen.
+    /// This method will generate stable and unique filenames for a set of photos - duplicate filenames
+    /// in a single folder will have "(1)", etc appended after them.
+    ///
+    /// If the user deletes one of of a pair of files with the same name,
+    /// I want to restore the original name to whichever is left - that means
+    /// that the path generation code needs to be safe, and return the same
+    /// result when called repeatedly on the same data set, but also generate
+    /// new data when called on a new dataset. (And be consistent cross-platform)
+    /// That's done by having every Photo have a cached "this is the path that
+    /// I want" that is expensive to calculate, then on parse we loop through
+    /// the photos in a _consistent order_ and generate the actual output paths.
+    /// This should be deterministic when you leave both files in place.
     static func allPhotosWithUniqueFilenames(in context: NSManagedObjectContext) throws -> [PhotoMapping] {
-        // If the user deletes one of of a pair of files with the same name,
-        // I want to restore the original name to whichever is left - that means
-        // that the path generation code needs to be safe, and return the same
-        // result when called repeatedly on the same data set, but also generate
-        // new data when called on a new dataset. (And be consistent cross-platform)
-        // That's done by having every Photo have a cached "this is the path that
-        // I want" that is expensive to calculate, then on parse we loop through
-        // the photos in a _consistent order_ and generate the actual output paths.
-        // This should be deterministic when you leave both files in place.
 
         let allPhotos = try Photo.matching(nil, in: context)
             .filter { $0.preferredPath != nil }

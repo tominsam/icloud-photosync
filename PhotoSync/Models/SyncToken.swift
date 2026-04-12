@@ -4,6 +4,7 @@ import CoreData
 import Foundation
 import SwiftyDropbox
 
+/// Massively over-engineered storage for the dropbox list folder cursor.
 @objc(SyncToken)
 public class SyncToken: NSManagedObject, ManagedObject {
 

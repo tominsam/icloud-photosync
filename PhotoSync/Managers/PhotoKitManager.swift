@@ -4,6 +4,11 @@ import CoreData
 import Photos
 import UIKit
 
+/// Fetches all files from PhotoKit and stores the files into the local database. There's no incremental
+/// fetch here that I trust (and it's not really worth it)
+/// Performance here is sensitive - because the photokit fetch can be done in a couple of seconds, the
+/// absolute bottleneck is our ability to create / update the DB entries, and optionally work out the filenames
+/// for the files.
 @MainActor
 class PhotoKitManager {
     let database: Database
@@ -38,8 +43,8 @@ class PhotoKitManager {
     }
     
     func internalSync() async throws {
+        let state = progressManager.createTask(named: "Local photos")
         let count = await database.perform { Photo.count(in: $0) }
-        let state = progressManager.createTask(named: "Local photos", total: count)
         let firstSync = count == 0
         
         /*
@@ -57,6 +62,7 @@ class PhotoKitManager {
          photos from my local library, where I get about 15k photos per second written into the data store.
          */
         
+        // takes a few seconds on large libraries
         let allAssets = await PHAsset.allAssets
         
         // First sync is slow because we have no photo paths, and those are expensive,
@@ -67,8 +73,12 @@ class PhotoKitManager {
         
         try await database.perform { context in
             
+            // Walk the assets in chunks and insert in bulk
             for chunk in allAssets.chunked(into: fetchSize) {
                 state.progress += chunk.count
+                // On first run `insertOrUpdate` needs to derive the filename, so
+                // it's slower. On later runs, it's just doing updates, we already know
+                // the filename, much much faster.
                 let (_, changed) = try Photo.insertOrUpdate(chunk, into: context)
                 if changed {
                     try context.save(andReset: true)
@@ -83,6 +93,7 @@ class PhotoKitManager {
                 allAssets.map { $0.localIdentifier }
             )
             for localIdentifier in deleteMe {
+                // Not super efficient. Don't care, this never happens for large numbers of photos.
                 if let photo = try Photo.forLocalIdentifier(localIdentifier, in: context) {
                     context.delete(photo)
                 }

@@ -3,19 +3,34 @@
 import Foundation
 import CoreData
 
+/// Ugly Core Data wrapper to make loading and using a database tolerable.
 actor Database {
     private(set) var persistentContainer: NSPersistentContainer
 
     init() {
+        // loadPersistentContainer calls the completion handler synchronously
+        // by default, but I don't _completely_ trust this to hold in all cases.
+        // I'm basically fine blocking app startup on this, it'll never be expensive
+        // enough for it to matter.
+        let semaphore = DispatchSemaphore(value: 0)
         var persistentContainer: NSPersistentContainer?
         Self.loadPersistentContainer { container in
             persistentContainer = container
+            semaphore.signal()
         }
+        semaphore.wait()
         self.persistentContainer = persistentContainer!
     }
-    
+
+    /// Creates a new background thread context, then calls the block with this context. The block
+    /// will happen on a background thread, and if it makes changes to objects it is responsible
+    /// for saving those changes before returning.
     func perform<Result>(block: @escaping @Sendable (NSManagedObjectContext) throws -> Result) async rethrows -> Result {
         let context = persistentContainer.newBackgroundContext()
+        defer {
+            // maybe too much?
+            assert(!context.hasChanges)
+        }
         return try await context.perform {
             try block(context)
         }

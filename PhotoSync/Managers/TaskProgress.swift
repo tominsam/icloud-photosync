@@ -13,7 +13,7 @@ final class TaskProgress: Identifiable, @unchecked Sendable {
     var progress: Int = 0
 
     /// The largest possible progress
-    var total: Int? = nil
+    var total: Int?
 
     /// If true the task is complete
     var complete: Bool = false

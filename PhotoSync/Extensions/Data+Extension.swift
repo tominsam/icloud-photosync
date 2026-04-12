@@ -12,7 +12,7 @@ extension InputStream {
 
     // Method: https://www.dropbox.com/developers/reference/content-hash
     // based on https://gist.github.com/crspybits/8a5c8df80fa9d5da955f338c4fef124f
-    // This should be async, it's potentially reading hundreds of megs off disk,
+    // This should be off main thread, it's potentially reading hundreds of megs off disk,
     // but in practice it seems to be really really fast, so it's not a priority
     func dropboxContentHash() -> String {
         let blockSize = 1024 * 1024 * 4

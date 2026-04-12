@@ -279,4 +279,3 @@ func loggingDuration<R>(_ name: String, _ body: () throws -> R) rethrows -> R {
     defer { NSLog("\(name): \(Date().timeIntervalSince(startPoint)) seconds") }
     return try body()
 }
-
