@@ -1,10 +1,4 @@
-//
-//  PHAsset+Extensions.swift
-//  PhotoSync
-//
-//  Created by Thomas Insam on 5/12/20.
-//  Copyright © 2020 Thomas Insam. All rights reserved.
-//
+// Copyright 2020 Thomas Insam. All rights reserved.
 
 import Photos
 

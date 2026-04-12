@@ -1,10 +1,4 @@
-//
-//  DeleteOperation.swift
-//  PhotoSync
-//
-//  Created by Thomas Insam on 5/12/20.
-//  Copyright © 2020 Thomas Insam. All rights reserved.
-//
+// Copyright 2020 Thomas Insam. All rights reserved.
 
 import CoreData
 import Foundation
@@ -22,7 +16,7 @@ class DeleteOperation {
         let file: DropboxFile
     }
 
-    static func deleteFiles(persistentContainer: NSPersistentContainer, dropboxClient: DropboxClient, tasks: [DeleteTask]) async throws {
+    static func deleteFiles(database: Database, dropboxClient: DropboxClient, tasks: [DeleteTask]) async throws {
         let entries = tasks.map { task in
             Files.DeleteArg(path: task.file.pathLower, parentRev: task.file.rev)
         }
@@ -38,8 +32,7 @@ class DeleteOperation {
             throw DeleteError.otherResponse
         }
 
-        let context = persistentContainer.newBackgroundContext()
-        try await context.perform {
+        try await database.perform { context in
             tasks.forEach { task in
                 context.delete(context.object(with: task.file.objectID))
             }

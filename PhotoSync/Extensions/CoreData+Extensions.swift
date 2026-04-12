@@ -1,10 +1,4 @@
-//
-//  CoreData+Extensions.swift
-//  PhotoSync
-//
-//  Created by Thomas Insam on 4/10/20.
-//  Copyright © 2020 Thomas Insam. All rights reserved.
-//
+// Copyright 2020 Thomas Insam. All rights reserved.
 
 @preconcurrency import CoreData
 
@@ -13,12 +7,10 @@ extension NSManagedObjectContext {
         return NSEntityDescription.insertNewObject(forEntityName: A.entity().managedObjectClassName, into: self) as! A
     }
 
-    func performSave(andReset: Bool = false) async throws {
-        try await self.perform {
-            try self.save()
-            if andReset {
-                self.reset()
-            }
+    func save(andReset: Bool) throws {
+        try self.save()
+        if andReset {
+            self.reset()
         }
     }
 }
@@ -39,14 +31,12 @@ extension ManagedObject {
         return request
     }
 
-    static func matching(_ predicate: String?, args: [Any] = [], limit: Int? = nil, in context: NSManagedObjectContext) async throws -> [Self] {
+    static func matching(_ predicate: String?, args: [Any] = [], limit: Int? = nil, in context: NSManagedObjectContext) throws -> [Self] {
         let fetchRequest = fetch(with: NSPredicate(format: predicate ?? "1=1", argumentArray: args))
         if let limit = limit {
             fetchRequest.fetchLimit = limit
         }
-        return try await context.perform {
-            try context.fetch(fetchRequest)
-        }
+        return try context.fetch(fetchRequest)
     }
 
     static func count(_ predicate: String? = nil, args: [Any] = [], in context: NSManagedObjectContext) -> Int {

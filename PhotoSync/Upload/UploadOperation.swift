@@ -1,4 +1,4 @@
-//  Copyright 2020 Thomas Insam. All rights reserved.
+// Copyright 2020 Thomas Insam. All rights reserved.
 
 import CollectionConcurrencyKit
 import CoreData
@@ -6,15 +6,10 @@ import Photos
 import SwiftyDropbox
 import UIKit
 
-enum UploadError: Error {
-    case photoKit(String)
-    case dropbox(String)
-}
-
 // Upload bundles of assets to dropbox at once - this is much much faster than uploading individually,
 // even though it's much more complicated, because Dropbox has internal transaction / locking that effectively
 // prevent me uploading more than one file at once.
-class BatchUploader: LoggingOperation {
+class UploadOperation {
     enum UploadState {
         // File is not in dropbox
         case new
@@ -23,7 +18,7 @@ class BatchUploader: LoggingOperation {
         // File is in dropbox, local hash is nil
         case unknown
     }
-    public struct UploadTask {
+    struct UploadTask {
         let asset: PHAsset
         let filename: String
         let existingContentHash: String?
@@ -36,31 +31,31 @@ class BatchUploader: LoggingOperation {
         case failure(path: String, message: String, error: Error?)
     }
 
-    public enum FinishResult {
+    enum FinishResult {
         case success(Files.FileMetadata)
         case unchanged
         case failure(path: String, message: String, error: Error?)
     }
 
-    public static func batchUpload(persistentContainer: NSPersistentContainer, dropboxClient: DropboxClient, tasks: [UploadTask], stateManager: StateManager) async -> [FinishResult] {
-        var fetchState = await stateManager.createState(named: "Fetch chunk", total: tasks.count)
+    static func batchUpload(database: Database, dropboxClient: DropboxClient, tasks: [UploadTask], progressManager: ProgressManager) async -> [FinishResult] {
+        var fetchState = progressManager.createTask(named: "Fetch chunk", total: tasks.count)
         defer {
             Task {
-                await fetchState.remove()
+                fetchState.remove()
             }
         }
 
         // Download all the images, one at a time, in advance.
         let data = await tasks.asyncMap {
-            await fetchState.increment()
-            return await download(persistentContainer: persistentContainer, asset: $0.asset)
+            fetchState.progress += 1
+            return await download(database: database, asset: $0.asset)
         }
-        await fetchState.setComplete()
+        fetchState.setComplete()
 
-        var uploadState = await stateManager.createState(named: "Upload chunk", total: tasks.count)
+        var uploadState = progressManager.createTask(named: "Upload chunk", total: tasks.count)
         defer {
             Task {
-                await uploadState.remove()
+                uploadState.remove()
             }
         }
 
@@ -70,7 +65,7 @@ class BatchUploader: LoggingOperation {
                 if data.hash != nil && task.existingContentHash == data.hash {
                     // This means that we've uploaded it before, in another install or whatever -
                     // the db hash equals the newly-calculated file hash, and we can skip it.
-                    await uploadState.updateTotal(to: uploadState.total - 1)
+                    uploadState.total -= 1
                     continue
                 }
                 group.addTask {
@@ -99,10 +94,10 @@ class BatchUploader: LoggingOperation {
                             try? FileManager.default.removeItem(at: url)
                         }
                     } catch {
-                        await uploadState.increment()
+                        uploadState.progress += 1
                         return .failure(path: task.filename, message: error.localizedDescription, error: error)
                     }
-                    await uploadState.increment()
+                    uploadState.progress += 1
                     return .success(task.filename, uploadSession)
                 }
             }
@@ -121,7 +116,7 @@ class BatchUploader: LoggingOperation {
 //            NSLog("%@", "Skipped \(tasks.count - uploadResults.count) file(s)")
 //        }
 //
-        await uploadState.setComplete()
+        uploadState.setComplete()
 
         do {
             return try await finish(dropboxClient: dropboxClient, entries: uploadResults)
@@ -139,17 +134,18 @@ class BatchUploader: LoggingOperation {
         }
     }
 
-    private static func download(persistentContainer: NSPersistentContainer, asset: PHAsset) async -> AssetData {
+    private static func download(database: Database, asset: PHAsset) async -> AssetData {
         // Get photo from photoKit. This is slow.
         do {
             // this is the _final_ image data, including patched exif for edited files and videos
             let data = try await asset.getImageData()
 
             // Store the content hash on the database object before we start the upload
-            let context = persistentContainer.newBackgroundContext()
-            if let photo = try await Photo.forLocalIdentifier(asset.localIdentifier, in: context) {
-                photo.contentHash = data.hash
-                try await context.performSave()
+            try await database.perform { context in
+                if let photo = try Photo.forLocalIdentifier(asset.localIdentifier, in: context) {
+                    photo.contentHash = data.hash
+                    try context.save()
+                }
             }
 
             return data

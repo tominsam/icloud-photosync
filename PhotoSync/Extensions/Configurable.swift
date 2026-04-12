@@ -1,10 +1,4 @@
-//
-//  Configurable.swift
-//  PhotoSync
-//
-//  Created by Thomas Insam on 4/10/20.
-//  Copyright © 2020 Thomas Insam. All rights reserved.
-//
+// Copyright 2020 Thomas Insam. All rights reserved.
 
 import Foundation
 

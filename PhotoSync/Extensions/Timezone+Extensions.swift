@@ -1,4 +1,4 @@
-//  Copyright 2022 Thomas Insam. All rights reserved.
+// Copyright 2022 Thomas Insam. All rights reserved.
 
 import Foundation
 

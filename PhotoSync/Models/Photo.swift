@@ -1,4 +1,4 @@
-//  Copyright 2020 Thomas Insam. All rights reserved.
+// Copyright 2020 Thomas Insam. All rights reserved.
 
 import CoreData
 import Foundation
@@ -33,13 +33,13 @@ public class Photo: NSManagedObject, ManagedObject {
 
 public extension Photo {
     @discardableResult
-    static func insertOrUpdate(_ assets: [PHAsset], into context: NSManagedObjectContext) async throws -> ([Photo], Bool) {
+    static func insertOrUpdate(_ assets: [PHAsset], into context: NSManagedObjectContext) throws -> ([Photo], Bool) {
         guard !assets.isEmpty else { return ([], false) }
 
-        let existing = try await Photo.matching("photoKitId IN (%@)", args: [assets.map { $0.localIdentifier }], in: context).uniqueBy(\.photoKitId)
+        let existing = try Photo.matching("photoKitId IN (%@)", args: [assets.map { $0.localIdentifier }], in: context).uniqueBy(\.photoKitId)
         var changed = false
         let photos = assets.map { asset in
-            let photo = existing[asset.localIdentifier] ?? context.performAndWait { context.insertObject() }
+            let photo = existing[asset.localIdentifier] ?? context.insertObject()
             if photo.update(from: asset) {
                 changed = true
             }
@@ -48,8 +48,8 @@ public extension Photo {
         return (photos, changed)
     }
 
-    static func forLocalIdentifier(_ localIdentifier: String, in context: NSManagedObjectContext) async throws -> Photo? {
-        return try await Photo.matching("photoKitId = %@", args: [localIdentifier], in: context).first
+    static func forLocalIdentifier(_ localIdentifier: String, in context: NSManagedObjectContext) throws -> Photo? {
+        return try Photo.matching("photoKitId = %@", args: [localIdentifier], in: context).first
     }
 
     struct PhotoMapping {
@@ -58,7 +58,7 @@ public extension Photo {
         let contentHash: String?
     }
 
-    static func allPhotosWithUniqueFilenames(in context: NSManagedObjectContext) async throws -> [PhotoMapping] {
+    static func allPhotosWithUniqueFilenames(in context: NSManagedObjectContext) throws -> [PhotoMapping] {
         // If the user deletes one of of a pair of files with the same name,
         // I want to restore the original name to whichever is left - that means
         // that the path generation code needs to be safe, and return the same
@@ -69,7 +69,7 @@ public extension Photo {
         // the photos in a _consistent order_ and generate the actual output paths.
         // This should be deterministic when you leave both files in place.
 
-        let allPhotos = try await Photo.matching(nil, in: context)
+        let allPhotos = try Photo.matching(nil, in: context)
             .filter { $0.preferredPath != nil }
             .sorted { (lhs, rhs) -> Bool in
                 if let ld = lhs.created, let rd = rhs.created, ld != rd {

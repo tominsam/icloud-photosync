@@ -1,4 +1,4 @@
-//  Copyright 2022 Thomas Insam. All rights reserved.
+// Copyright 2022 Thomas Insam. All rights reserved.
 
 import CoreData
 import Foundation
@@ -33,30 +33,30 @@ public class SyncToken: NSManagedObject, ManagedObject {
 }
 
 public extension SyncToken {
-    static func insertOrUpdate(type: SyncTokenType, value: NSSecureCoding, into context: NSManagedObjectContext) async throws {
+    static func insertOrUpdate(type: SyncTokenType, value: NSSecureCoding, into context: NSManagedObjectContext) throws {
         let archiver = NSKeyedArchiver(requiringSecureCoding: true)
         archiver.encode(value, forKey: "data")
         archiver.encode(type.version, forKey: "version")
-        try await insertOrUpdate(type: type, value: archiver.encodedData, into: context)
-        try await context.performSave()
+        try insertOrUpdate(type: type, value: archiver.encodedData, into: context)
+        try context.save()
     }
 
     @discardableResult
-    private static func insertOrUpdate(type: SyncTokenType, value: Data, into context: NSManagedObjectContext) async throws -> SyncToken {
-        let existing = try await SyncToken.matching("type == %@", args: [type.rawValue], in: context).first
+    private static func insertOrUpdate(type: SyncTokenType, value: Data, into context: NSManagedObjectContext) throws -> SyncToken {
+        let existing = try SyncToken.matching("type == %@", args: [type.rawValue], in: context).first
         if let existing = existing {
             existing.value = value
             return existing
         } else {
-            let created: SyncToken = await context.perform { context.insertObject() }
+            let created: SyncToken = context.insertObject()
             created.type = type.rawValue
             created.value = value
             return created
         }
     }
 
-    static func dataFor<T: NSObject & NSSecureCoding>(type: SyncTokenType, in context: NSManagedObjectContext) async throws -> T? {
-        let data = try await SyncToken.matching("type == %@", args: [type.rawValue], in: context).first?.value
+    static func dataFor<T: NSObject & NSSecureCoding>(type: SyncTokenType, in context: NSManagedObjectContext) throws -> T? {
+        let data = try SyncToken.matching("type == %@", args: [type.rawValue], in: context).first?.value
         guard let data = data else {
             return nil
         }

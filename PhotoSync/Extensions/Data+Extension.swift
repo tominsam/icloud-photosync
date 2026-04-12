@@ -1,10 +1,4 @@
-//
-//  Data+Extension.swift
-//  PhotoSync
-//
-//  Created by Thomas Insam on 5/11/20.
-//  Copyright © 2020 Thomas Insam. All rights reserved.
-//
+// Copyright 2020 Thomas Insam. All rights reserved.
 
 import AVFoundation
 import CryptoKit

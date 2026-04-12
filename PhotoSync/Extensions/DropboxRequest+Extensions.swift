@@ -1,4 +1,4 @@
-//  Copyright 2020 Thomas Insam. All rights reserved.
+// Copyright 2020 Thomas Insam. All rights reserved.
 
 import SwiftyDropbox
 import UIKit

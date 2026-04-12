@@ -1,10 +1,4 @@
-//
-//  DropboxFile.swift
-//  PhotoSync
-//
-//  Created by Thomas Insam on 4/11/20.
-//  Copyright © 2020 Thomas Insam. All rights reserved.
-//
+// Copyright 2020 Thomas Insam. All rights reserved.
 
 import CoreData
 import Foundation
@@ -25,47 +19,43 @@ public class DropboxFile: NSManagedObject, ManagedObject {
 
 public extension DropboxFile {
     @discardableResult
-    static func insertOrUpdate(_ metadatas: [Files.FileMetadata], delete deletedMetadatas: [Files.DeletedMetadata], into context: NSManagedObjectContext) async throws -> [DropboxFile] {
+    static func insertOrUpdate(_ metadatas: [Files.FileMetadata], delete deletedMetadatas: [Files.DeletedMetadata], into context: NSManagedObjectContext) throws -> [DropboxFile] {
         let files: [DropboxFile]
         if !metadatas.isEmpty {
-            let existing = try await DropboxFile.matching("pathLower IN (%@)", args: [metadatas.map { $0.pathLower! }], in: context).uniqueBy(\.pathLower)
+            let existing = try DropboxFile.matching("pathLower IN (%@)", args: [metadatas.map { $0.pathLower! }], in: context).uniqueBy(\.pathLower)
             files = metadatas.compactMap { metadata -> DropboxFile? in
                 guard let path = metadata.pathLower else { return nil }
-                let file = existing[path] ?? context.performAndWait { context.insertObject() }
+                let file = existing[path] ?? context.insertObject()
                 file.update(from: metadata)
                 return file
             }
-            try await context.performSave()
+            try context.save()
         } else {
             files = []
         }
 
         if !deletedMetadatas.isEmpty {
-            let newExisting = try await DropboxFile.matching("pathLower IN (%@)", args: [deletedMetadatas.map { $0.pathLower! }], in: context).uniqueBy(\.pathLower)
+            let newExisting = try DropboxFile.matching("pathLower IN (%@)", args: [deletedMetadatas.map { $0.pathLower! }], in: context).uniqueBy(\.pathLower)
             deletedMetadatas.forEach { deleted in
                 if let path = deleted.pathLower, let file = newExisting[path] {
-                    context.performAndWait {
-                        context.delete(file)
-                    }
+                    context.delete(file)
                 }
             }
-            try await context.performSave()
+            try context.save()
         }
 
         return files
     }
 
-    static func forPath(_ pathLower: String, context: NSManagedObjectContext) async throws -> DropboxFile? {
-        return try await DropboxFile.matching("pathLower ==[c] %@", args: [pathLower], in: context).first
+    static func forPath(_ pathLower: String, context: NSManagedObjectContext) throws -> DropboxFile? {
+        return try DropboxFile.matching("pathLower ==[c] %@", args: [pathLower], in: context).first
     }
 
-    static func deleteAll(in context: NSManagedObjectContext) async throws {
-        for file in try await DropboxFile.matching(nil, in: context) {
-            await context.perform {
-                context.delete(file)
-            }
+    static func deleteAll(in context: NSManagedObjectContext) throws {
+        for file in try DropboxFile.matching(nil, in: context) {
+            context.delete(file)
         }
-        try await context.performSave(andReset: true)
+        try context.save(andReset: true)
     }
 
     internal func update(from metadata: Files.FileMetadata) {
