@@ -13,7 +13,9 @@ targets:
     type: application
     platform: iOS
     deploymentTarget: "26.1"
-    scheme: {}
+    scheme:
+      testTargets:
+        - PhotoSyncTests
     settings:
       base:
         TARGETED_DEVICE_FAMILY: 1 # iphone only
@@ -68,3 +70,16 @@ targets:
       - script: /opt/homebrew/bin/swiftlint
         name: Run SwiftLint
         basedOnDependencyAnalysis: false
+
+  PhotoSyncTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "26.1"
+    sources:
+      - path: "PhotoSyncTests"
+    dependencies:
+      - target: PhotoSync
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.movieos.photosync.tests
+        GENERATE_INFOPLIST_FILE: YES
