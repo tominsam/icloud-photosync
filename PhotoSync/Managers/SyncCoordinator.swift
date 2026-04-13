@@ -3,7 +3,6 @@
 import CoreData
 import Combine
 import Foundation
-import KeychainSwift
 import Photos
 import SwiftyDropbox
 import UIKit
@@ -20,9 +19,6 @@ struct ServiceError: Identifiable, Sendable {
 @MainActor
 @Observable
 class SyncCoordinator {
-    static let KeychainDropboxAccessToken = "KeychainDropboxAccessToken"
-    private let keychain = KeychainSwift()
-
     static let tempDir = URL(
         fileURLWithPath: NSTemporaryDirectory(),
         isDirectory: true

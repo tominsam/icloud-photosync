@@ -6,12 +6,6 @@ packages:
   SwiftyDropbox:
     url: https://github.com/dropbox/SwiftyDropbox.git
     exactVersion: 10.0.0-beta.3
-  KeychainSwift:
-    url: https://github.com/evgenyneu/keychain-swift.git
-    revision: 32a99b537d1c6f3529a08257c28a5feb70c0c5af
-  CollectionConcurrencyKit:
-    url: https://github.com/JohnSundell/CollectionConcurrencyKit.git
-    revision: b4f23e24b5a1bff301efc5e70871083ca029ff95
 
 targets:
   PhotoSync:
@@ -44,8 +38,6 @@ targets:
         buildPhase: none
     dependencies:
       - package: SwiftyDropbox
-      - package: KeychainSwift
-      - package: CollectionConcurrencyKit
     info:
       path: Info.plist
       properties:

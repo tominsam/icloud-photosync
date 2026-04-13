@@ -1,6 +1,5 @@
 // Copyright 2020 Thomas Insam. All rights reserved.
 
-import CollectionConcurrencyKit
 import CoreData
 import Photos
 import SwiftyDropbox

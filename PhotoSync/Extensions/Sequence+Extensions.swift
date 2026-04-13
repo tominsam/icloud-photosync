@@ -21,6 +21,17 @@ extension Array {
     }
 }
 
+extension Sequence {
+    /// map equivalent for a sequence, but the map block is async. Runs serially.
+    func asyncMap<T>(_ transform: (Element) async throws -> T) async rethrows -> [T] {
+        var results = [T]()
+        for element in self {
+            try await results.append(transform(element))
+        }
+        return results
+    }
+}
+
 extension Sequence where Element: Sendable {
     /// map equivalent for a sequence, but the map block is async, and we will run up to `maxJobs`
     /// blocks simultaneously.
