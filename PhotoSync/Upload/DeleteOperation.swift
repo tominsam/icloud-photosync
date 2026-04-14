@@ -13,12 +13,13 @@ enum DeleteError: Error {
 
 class DeleteOperation {
     struct DeleteTask {
-        let file: DropboxFile
+        let pathLower: String
+        let rev: String
     }
 
     static func deleteFiles(database: Database, dropboxClient: DropboxClient, tasks: [DeleteTask]) async throws {
         let entries = tasks.map { task in
-            Files.DeleteArg(path: task.file.pathLower, parentRev: task.file.rev)
+            Files.DeleteArg(path: task.pathLower, parentRev: task.rev)
         }
         NSLog("%@", "Deleting \(tasks.count) files")
 
@@ -32,12 +33,12 @@ class DeleteOperation {
             throw DeleteError.otherResponse
         }
 
-        try await database.perform { context in
-            tasks.forEach { task in
-                context.delete(context.object(with: task.file.objectID))
-            }
-            try context.save()
-        }
+//        try await database.perform { context in
+//            tasks.forEach { task in
+//                context.delete(context.object(with: task.file.objectID))
+//            }
+//            try context.save()
+//        }
         NSLog("%@", "Deleted \(tasks.count) files")
     }
 

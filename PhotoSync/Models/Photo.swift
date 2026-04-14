@@ -4,44 +4,52 @@ import CoreData
 import Foundation
 import Photos
 
+// Protocol allows mocking for tests
+protocol PhotoProtocol {
+    var photoKitId: String! { get }
+    var created: Date? { get }
+    var preferredPath: String? { get }
+    var contentHash: String? { get }
+}
+
 /// Core data object representing a photo from PhotoKit. These are very cheap to fetch from
 /// the system - the DB object is here because some photo properties are _very_ expensive
 /// (for example the contentHash property requires us to download the original binary asset)
 /// so this table represents the most valuable data the app holds.
 @objc(Photo)
-public class Photo: NSManagedObject, ManagedObject {
-    public static var defaultSortDescriptors = [
+class Photo: NSManagedObject, ManagedObject, PhotoProtocol {
+    static var defaultSortDescriptors = [
         NSSortDescriptor(key: "created", ascending: false),
         NSSortDescriptor(key: "photoKitId", ascending: true)
     ]
 
     // Properties from photokit
-    @NSManaged public var photoKitId: String!
-    @NSManaged public var created: Date?
-    @NSManaged public var modified: Date?
+    @NSManaged var photoKitId: String!
+    @NSManaged var created: Date?
+    @NSManaged var modified: Date?
 
     // The filename of the image in PhotoKit. Slightly expensive to calculate
     // (because we need to fetch all representations of the photo) so we
     // cache it.
-    @NSManaged public var filename: String?
+    @NSManaged var filename: String?
 
     // The path we want the image to have on disk. Derived from photokit data
     // Doesn't need the original version to be downloaded to achieve this, but
     // is a little more expensive to calculate than filename, so we cache it.
-    @NSManaged public var preferredPath: String?
+    @NSManaged var preferredPath: String?
 
     // The dropbox contenthash of the image. Optional because we need the
     // image data to calculate this, so I'll only set it when I
     // have read the image.
-    @NSManaged public var contentHash: String?
+    @NSManaged var contentHash: String?
 }
 
-public extension Photo {
+extension Photo {
     /// Inset a batch of PHAssets into the database, including calculating their filenames. If the
     /// assets already exist we won't re-calculate the filename if the image is unchanged, so it's
     /// much cheaper to call a second time.
     @discardableResult
-    static func insertOrUpdate(_ assets: [PHAsset], into context: NSManagedObjectContext) throws -> ([Photo], Bool) {
+    static func insertOrUpdate(_ assets: [PHAssetProtocol], into context: NSManagedObjectContext) throws -> ([Photo], Bool) {
         guard !assets.isEmpty else { return ([], false) }
         // dict of photo ID -> photo of existing DB objects
         let existing = try Photo.matching(
@@ -71,13 +79,6 @@ public extension Photo {
         let contentHash: String?
     }
 
-    struct PhotoEntry {
-        let photoKitId: String
-        let preferredPath: String
-        let contentHash: String?
-        let created: Date?
-    }
-
     /// Returns an array containing every photo in the database, along with the _unique_
     /// path into the destination that we want that photo to have. Photo filenames are
     /// in folders by month, and take the filename from Photos.app, but filenames in there
@@ -95,15 +96,13 @@ public extension Photo {
     /// the photos in a _consistent order_ and generate the actual output paths.
     /// This should be deterministic when you leave both files in place.
     static func allPhotosWithUniqueFilenames(in context: NSManagedObjectContext) throws -> [PhotoMapping] {
-        let allPhotos = try Photo.matching(nil, in: context).filter { $0.preferredPath != nil }
-        return uniqueFilenames(from: allPhotos.map {
-            PhotoEntry(photoKitId: $0.photoKitId!, preferredPath: $0.preferredPath!, contentHash: $0.contentHash, created: $0.created)
-        })
+        let allPhotos = try Photo.matching(nil, in: context)
+        return uniqueFilenames(from: allPhotos)
     }
 
     /// Pure deduplication logic, separated from CoreData for testability.
-    static func uniqueFilenames(from photos: [PhotoEntry]) -> [PhotoMapping] {
-        let sorted = photos.sorted { lhs, rhs in
+    static func uniqueFilenames(from photos: [PhotoProtocol]) -> [PhotoMapping] {
+        let sorted = photos.filter { $0.preferredPath != nil }.sorted { lhs, rhs in
             if let ld = lhs.created, let rd = rhs.created, ld != rd { return ld < rd }
             return lhs.photoKitId < rhs.photoKitId
         }
@@ -112,7 +111,7 @@ public extension Photo {
             // Photos makes no attempt to keep filenames unique. Keep appending a number to the
             // filename until we get something unique. Remember that file systems are
             // often not case sensitive!
-            var path = photo.preferredPath
+            var path = photo.preferredPath!
             while assigned.contains(path.lowercased()) {
                 path = path.incrementFilenameMagicNumber()
             }
@@ -121,7 +120,7 @@ public extension Photo {
         }
     }
 
-    private func update(from asset: PHAsset) -> Bool {
+    private func update(from asset: PHAssetProtocol) -> Bool {
         var changed = false
 
         if photoKitId != asset.localIdentifier || created != asset.creationDate {

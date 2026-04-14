@@ -4,25 +4,32 @@ import CoreData
 import Foundation
 @preconcurrency import SwiftyDropbox
 
+// Protocol allows mocking for tests
+protocol DropboxFileProtocol {
+    var pathLower: String { get }
+    var rev: String { get }
+    var contentHash: String { get }
+}
+
 /// Represents a local cache of the state of a file in dropbox. We need this because we don't want
 /// to fetch every single file via the pagination API every time, the continuation API is very fast.
 /// However it's a matter of a minute or so to refresh everything, so this table is not particularly
 /// important - we can lose it and replace it easily.
 @objc(DropboxFile)
-public class DropboxFile: NSManagedObject, ManagedObject {
-    public static var defaultSortDescriptors: [NSSortDescriptor] {
+class DropboxFile: NSManagedObject, ManagedObject, DropboxFileProtocol {
+    static var defaultSortDescriptors: [NSSortDescriptor] {
         return [NSSortDescriptor(key: "modified", ascending: false)]
     }
 
     // All these properties are directly from the API, no local calculations
-    @NSManaged public var dropboxId: String
-    @NSManaged public var pathLower: String
-    @NSManaged public var rev: String
-    @NSManaged public var contentHash: String
-    @NSManaged public var modified: Date?
+    @NSManaged var dropboxId: String
+    @NSManaged var pathLower: String
+    @NSManaged var rev: String
+    @NSManaged var contentHash: String
+    @NSManaged var modified: Date?
 }
 
-public extension DropboxFile {
+extension DropboxFile {
     @discardableResult
     static func insertOrUpdate(
         _ metadatas: [Files.FileMetadata],

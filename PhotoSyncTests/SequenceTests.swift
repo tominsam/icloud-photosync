@@ -6,15 +6,15 @@ import Testing
 struct SequenceTests {
 
     @Test func chunkedSplitsEvenly() {
-        #expect([1,2,3,4].chunked(into: 2) == [[1,2],[3,4]])
+        #expect([1, 2, 3, 4].chunked(into: 2) == [[1, 2], [3, 4]])
     }
 
     @Test func chunkedHandlesRemainder() {
-        #expect([1,2,3,4,5].chunked(into: 2) == [[1,2],[3,4],[5]])
+        #expect([1, 2, 3, 4, 5].chunked(into: 2) == [[1, 2], [3, 4], [5]])
     }
 
     @Test func chunkedSingleChunk() {
-        #expect([1,2,3].chunked(into: 10) == [[1,2,3]])
+        #expect([1, 2, 3].chunked(into: 10) == [[1, 2, 3]])
     }
 
     @Test func chunkedEmpty() {

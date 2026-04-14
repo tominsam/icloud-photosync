@@ -19,7 +19,7 @@ class UploadOperation {
         case unknown
     }
     struct UploadTask {
-        let asset: PHAsset
+        let asset: PHAssetProtocol
         let filename: String
         let existingContentHash: String?
         let state: UploadState
@@ -37,6 +37,8 @@ class UploadOperation {
         case failure(path: String, message: String, error: Error?)
     }
 
+    // going to number all the batches, so there's some sort of sense of progress
+    // towards the goal in the UI.
     static var batchNumber = 0
     
     static func batchUpload(
@@ -139,11 +141,11 @@ class UploadOperation {
         }
     }
 
-    private static func download(database: Database, asset: PHAsset) async -> AssetData {
+    private static func download(database: Database, asset: PHAssetProtocol) async -> AssetData {
         // Get photo from photoKit. This is slow.
         do {
             // this is the _final_ image data, including patched exif for edited files and videos.
-            let data = try await asset.getImageData()
+            let data = try await asset.getImageData(version: .original)
 
             // Store the content hash on the database object before we start the upload
             try await database.perform { context in

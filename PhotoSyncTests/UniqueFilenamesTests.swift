@@ -4,14 +4,25 @@ import Foundation
 import Testing
 @testable import PhotoSync
 
+struct MockPhoto: PhotoProtocol {
+    let photoKitId: String!
+    let created: Date?
+    let preferredPath: String?
+    let contentHash: String?
+}
+
 struct UniqueFilenamesTests {
 
-    private func entry(_ id: String, _ path: String, created: TimeInterval? = nil) -> Photo.PhotoEntry {
-        Photo.PhotoEntry(photoKitId: id, preferredPath: path, contentHash: nil,
-                         created: created.map { Date(timeIntervalSinceReferenceDate: $0) })
+    private func entry(_ id: String, _ path: String, created: TimeInterval? = nil) -> MockPhoto {
+        MockPhoto(
+            photoKitId: id,
+            created: created.map { Date(timeIntervalSinceReferenceDate: $0) },
+            preferredPath: path,
+            contentHash: nil,
+        )
     }
 
-    private func run(_ entries: [Photo.PhotoEntry]) -> [String: String] {
+    private func run(_ entries: [MockPhoto]) -> [String: String] {
         Dictionary(uniqueKeysWithValues: Photo.uniqueFilenames(from: entries).map { ($0.photoKitId, $0.path) })
     }
 
@@ -34,7 +45,7 @@ struct UniqueFilenamesTests {
     }
 
     @Test func threeWayCollisionGetsSuffixes() {
-        let entries = ["a","b","c"].enumerated().map { entry($0.element, "2024/01/photo.jpg", created: Double($0.offset)) }
+        let entries = ["a", "b", "c"].enumerated().map { entry($0.element, "2024/01/photo.jpg", created: Double($0.offset)) }
         let result = run(entries)
         #expect(result["a"] == "2024/01/photo.jpg")
         #expect(result["b"] == "2024/01/photo (1).jpg")
@@ -60,9 +71,16 @@ struct UniqueFilenamesTests {
     }
 
     @Test func contentHashPreserved() {
-        let mappings = Photo.uniqueFilenames(from: [
-            Photo.PhotoEntry(photoKitId: "a", preferredPath: "2024/01/a.jpg", contentHash: "abc123", created: nil),
-        ])
+        let mappings = Photo.uniqueFilenames(
+            from: [
+                MockPhoto(
+                    photoKitId: "a",
+                    created: nil,
+                    preferredPath: "2024/01/a.jpg",
+                    contentHash: "abc123",
+                ),
+            ]
+        )
         #expect(mappings[0].contentHash == "abc123")
     }
 

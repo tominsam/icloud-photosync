@@ -55,8 +55,8 @@ class UploadManager {
 
         // Group every photo into categories based on if we need to upload it as a new
         // file, or a changed file, or delete it
-        let (changes, deletions) = try await database.perform { [self] context in
-            try iterateAllPhotos(inContext: context, allAssets: allAssets)
+        let (changes, deletions) = try await database.perform { context in
+            try Self.iterateAllPhotos(inContext: context, allAssets: allAssets)
         }
 
         if deletions.count > 1000 {
@@ -138,29 +138,46 @@ class UploadManager {
         }
     }
 
-    nonisolated func iterateAllPhotos(
+    nonisolated static func iterateAllPhotos(
         inContext context: NSManagedObjectContext,
-        allAssets: [PHAsset]
+        allAssets: [PHAssetProtocol]
     ) throws -> ([UploadOperation.UploadTask], [DeleteOperation.DeleteTask]) {
         // Everything we _want_ to upload in order
         let allPhotos = try Photo.allPhotosWithUniqueFilenames(in: context)
-        // allPhotos is thin objects - build a lookup table for the real assets
-        let assets = allAssets.uniqueBy(\.localIdentifier)
         // All the files we know about remotely, accessible by path.
-        var dropboxFiles = try DropboxFile.matching(nil, in: context).uniqueBy(\.pathLower)
+        let allFiles = try DropboxFile.matching(nil, in: context)
+        return try iterate(photos: allPhotos, files: allFiles, assets: allAssets)
+    }
+    
+    /// Build a list of things to do based on the ground state of the device
+    /// - Parameters:
+    ///   - photos: A list of the photos we _want_ to exist, along with the path we want them to have
+    ///   - files: All the files that exist in the remote server
+    ///   - assets: A list of PHAssets on the local device
+    /// - Returns: Two sets of tasks - the array of UploadTask objects are the photos we might need to upload,
+    /// (classified into "must be uploaded", becaue they're newly created or changed files, and "might need to be uploaded",
+    /// because we don't have a contentHash for those files) and the DeleteTask array is files the need to be removed from the server.
+    nonisolated static func iterate(
+        photos: [Photo.PhotoMapping],
+        files: [DropboxFileProtocol],
+        assets: [PHAssetProtocol],
+    ) throws -> ([UploadOperation.UploadTask], [DeleteOperation.DeleteTask]) {
+        // the objects in Photos are thin - build a lookup table for the real assets
+        let assetsLookup = assets.uniqueBy(\.localIdentifier)
+        var filesLookup: [String: DropboxFileProtocol] = files.uniqueBy(\.pathLower)
 
         var uploads = [UploadOperation.UploadTask]()
         var deletions = [DeleteOperation.DeleteTask]()
 
-        for photo in allPhotos {
-            guard let asset = assets[photo.photoKitId] else {
+        for photo in photos {
+            guard let asset = assetsLookup[photo.photoKitId] else {
                 continue
             }
 
             // Track the dropbox files we've seen in photokit - anything left over
             // after we remove the uploads must need to be deleted.
-            let file = dropboxFiles[photo.path.localizedLowercase]
-            dropboxFiles.removeValue(forKey: photo.path.localizedLowercase)
+            let file = filesLookup[photo.path.localizedLowercase]
+            filesLookup.removeValue(forKey: photo.path.localizedLowercase)
 
             if file != nil && photo.contentHash == file?.contentHash {
                 // The destination exists and has the right content hash.
@@ -195,13 +212,12 @@ class UploadManager {
 
         // Anything left in the dropbox files list needs to be deleted,
         // because it isn't in the local photos database
-        for (_, file) in dropboxFiles {
-            deletions.append(DeleteOperation.DeleteTask(file: file))
+        for (_, file) in filesLookup {
+            deletions.append(DeleteOperation.DeleteTask(pathLower: file.pathLower, rev: file.rev))
         }
-        // delete more recent files first
-        deletions.sort { (lhs, rhs) in lhs.file.pathLower > rhs.file.pathLower }
+        // delete more recent files first (month is in the path)
+        deletions.sort { (lhs, rhs) in lhs.pathLower > rhs.pathLower }
 
-        try context.save()
         return (uploads, deletions)
     }
 }

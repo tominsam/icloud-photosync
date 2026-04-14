@@ -47,13 +47,24 @@ enum AssetError: Error, LocalizedError {
     }
 }
 
-extension PHAsset {
-    static var dateFormatter: DateFormatter = {
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy/MM"
-        return dateFormatter
-    }()
+private let dateFormatter: DateFormatter = {
+    let dateFormatter = DateFormatter()
+    dateFormatter.dateFormat = "yyyy/MM"
+    return dateFormatter
+}()
 
+// Protocol allows mocking for tests
+protocol PHAssetProtocol {
+    var localIdentifier: String { get }
+    var creationDate: Date? { get }
+    var modificationDate: Date? { get }
+    var timezone: TimeZone? { get }
+    var filename: String? { get }
+
+    func getImageData(version: PHImageRequestOptionsVersion) async throws -> AssetData
+}
+
+extension PHAsset: PHAssetProtocol {
     /// Attempts to derive the timezone for an image from the lat/lng of the image. PHAsset
     /// doesn't have a native timezone property for some reason (but it's in iPhoto! Why is
     /// it not visible on the API!?) but we need localtime for the image because the day folder
@@ -62,25 +73,7 @@ extension PHAsset {
         guard let location else { return nil }
         return TimezoneMapper.latLngToTimezone(location.coordinate)
     }
-
-    /// Get the "preferred" dropbox filename for this asset. Currently this is hard-coded
-    /// to be "yyyy/mm/iphoto-filename.jpg". This is slow (100ms+) because we need to fetch
-    /// another representation from the photokit database to do it, so they're cached elsewhere.
-    /// This method doesn't worry about avoiding collisions (that's elsewhere)
-    func dropboxPath(fromFilename filename: String) -> String {
-        let datePath: String
-        if let creationDate = creationDate {
-            // Can we get a timezone from the photo location? Assume the photo was taken in that TZ
-            Self.dateFormatter.timeZone = self.timezone ?? TimeZone(identifier: "UTC")!
-            datePath = Self.dateFormatter.string(from: creationDate)
-        } else {
-            // no creation date?
-            datePath = "No date"
-        }
-
-        return "/\(datePath)/\(filename)".lowercased()
-    }
-
+    
     // This is slow! (~100ms)
     var filename: String? {
         return PHAssetResource.assetResources(for: self)
@@ -89,10 +82,10 @@ extension PHAsset {
             }?
             .originalFilename
     }
-
-    func getImageData(version: PHImageRequestOptionsVersion = .original) async throws -> AssetData {
+    
+    func getImageData(version: PHImageRequestOptionsVersion) async throws -> AssetData {
         let manager = PHImageManager.default()
-
+        
         switch mediaType {
         case .image:
             let options = PHImageRequestOptions()
@@ -100,7 +93,7 @@ extension PHAsset {
             options.version = version
             options.isNetworkAccessAllowed = true // download if required
             options.isSynchronous = true // stay on thread for async simplicity
-
+            
             let data: Data = try await withCheckedThrowingContinuation { continuation in
                 manager.requestImageDataAndOrientation(for: self, options: options) { data, _, _, info in
                     guard let data = data else {
@@ -112,7 +105,7 @@ extension PHAsset {
                     continuation.resume(returning: data)
                 }
             }
-
+            
             // If you edit the capture date of a photo in Photos, that doesn't change the Original
             // bytes downloaded from the server. I kinda want to update the file on disk to have the
             // right exif, because that means the dropbox photo browser will show the image in the
@@ -121,9 +114,9 @@ extension PHAsset {
             
             //let dataWithExif = await Self.setDate(onImage: data, date: self.creationDate, timezone: self.timezone)
             //return .data(dataWithExif, hash: dataWithExif.dropboxContentHash())
-
+            
             return .data(data, hash: data.dropboxContentHash())
-
+            
         case .video:
             let avAsset = try await manager.getAVAsset(for: self)
             if let avUrlAsset = avAsset as? AVURLAsset {
@@ -133,6 +126,63 @@ extension PHAsset {
         default:
             throw AssetError.mediaType(mediaType)
         }
+    }
+}
+
+extension PHAsset {
+    /// Fetches every PHAsset in the DB in one huge fetch. I've found that this isn't worth
+    /// paginating or optimmizing - my personal photo DB is 160,000 photos and this fetches
+    /// in 4-5 seconds and doesn't use that much ram, that's a completely reasonable amount
+    /// of time compared to the rest of the things that are happening around here.
+    static var allAssets: [PHAssetProtocol] {
+        get async {
+            return await withCheckedContinuation { continuation in
+                let start = Date()
+
+                let allPhotosOptions = PHFetchOptions()
+                allPhotosOptions.wantsIncrementalChangeDetails = false
+                let assets = PHAsset.fetchAssets(with: allPhotosOptions)
+                var allAssets = [PHAsset]()
+                assets.enumerateObjects { asset, _, _ in
+                    // the returned object isn't an array and can't
+                    // conveniently be cast to one
+                    allAssets.append(asset)
+                }
+
+                // We can't sort by identifier in the predicate, so sort in ram
+                allAssets.sort { (lhs, rhs) in
+                    if let ld = lhs.creationDate, let rd = rhs.creationDate, ld != rd {
+                        return ld < rd
+                    }
+                    // keep determinstic (localidentifier isn't properly deterministic, I guess
+                    // running this on another device might flip the order here, and that'll have
+                    // implications for filenames)
+                    return lhs.localIdentifier < rhs.localIdentifier
+                }
+
+                NSLog("%@", "PhotoKit call took \((-start.timeIntervalSinceNow).formatted()) seconds to read \(allAssets.count) photos")
+                continuation.resume(returning: allAssets)
+            }
+        }
+    }}
+
+extension PHAssetProtocol {
+    /// Get the "preferred" dropbox filename for this asset. Currently this is hard-coded
+    /// to be "yyyy/mm/iphoto-filename.jpg". This is slow (100ms+) because we need to fetch
+    /// another representation from the photokit database to do it, so they're cached elsewhere.
+    /// This method doesn't worry about avoiding collisions (that's elsewhere)
+    func dropboxPath(fromFilename filename: String) -> String {
+        let datePath: String
+        if let creationDate = creationDate {
+            // Can we get a timezone from the photo location? Assume the photo was taken in that TZ
+            dateFormatter.timeZone = self.timezone ?? TimeZone(identifier: "UTC")!
+            datePath = dateFormatter.string(from: creationDate)
+        } else {
+            // no creation date?
+            datePath = "No date"
+        }
+
+        return "/\(datePath)/\(filename)".lowercased()
     }
 
 //    static func setDate(onImage data: Data, date: Date?, timezone: TimeZone?) async -> Data {
@@ -225,41 +275,6 @@ extension PHAsset {
 //        return dates + moreDates
 //    }
 
-    /// Fetches every PHAsset in the DB in one huge fetch. I've found that this isn't worth
-    /// paginating or optimmizing - my personal photo DB is 160,000 photos and this fetches
-    /// in 4-5 seconds and doesn't use that much ram, that's a completely reasonable amount
-    /// of time compared to the rest of the things that are happening around here.
-    static var allAssets: [PHAsset] {
-        get async {
-            return await withCheckedContinuation { continuation in
-                let start = Date()
-
-                let allPhotosOptions = PHFetchOptions()
-                allPhotosOptions.wantsIncrementalChangeDetails = false
-                let assets = PHAsset.fetchAssets(with: allPhotosOptions)
-                var allAssets = [PHAsset]()
-                assets.enumerateObjects { asset, _, _ in
-                    // the returned object isn't an array and can't
-                    // conveniently be cast to one
-                    allAssets.append(asset)
-                }
-
-                // We can't sort by identifier in the predicate, so sort in ram
-                allAssets.sort { (lhs, rhs) in
-                    if let ld = lhs.creationDate, let rd = rhs.creationDate, ld != rd {
-                        return ld < rd
-                    }
-                    // keep determinstic (localidentifier isn't properly deterministic, I guess
-                    // running this on another device might flip the order here, and that'll have
-                    // implications for filenames)
-                    return lhs.localIdentifier < rhs.localIdentifier
-                }
-
-                NSLog("%@", "PhotoKit call took \((-start.timeIntervalSinceNow).formatted()) seconds to read \(allAssets.count) photos")
-                continuation.resume(returning: allAssets)
-            }
-        }
-    }
 }
 
 extension PHImageManager {
