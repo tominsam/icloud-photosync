@@ -77,6 +77,7 @@ targets:
     deploymentTarget: "26.1"
     sources:
       - path: "PhotoSyncTests"
+        type: syncedFolder
     dependencies:
       - target: PhotoSync
     settings:

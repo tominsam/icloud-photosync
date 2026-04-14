@@ -71,6 +71,13 @@ public extension Photo {
         let contentHash: String?
     }
 
+    struct PhotoEntry {
+        let photoKitId: String
+        let preferredPath: String
+        let contentHash: String?
+        let created: Date?
+    }
+
     /// Returns an array containing every photo in the database, along with the _unique_
     /// path into the destination that we want that photo to have. Photo filenames are
     /// in folders by month, and take the filename from Photos.app, but filenames in there
@@ -88,26 +95,28 @@ public extension Photo {
     /// the photos in a _consistent order_ and generate the actual output paths.
     /// This should be deterministic when you leave both files in place.
     static func allPhotosWithUniqueFilenames(in context: NSManagedObjectContext) throws -> [PhotoMapping] {
+        let allPhotos = try Photo.matching(nil, in: context).filter { $0.preferredPath != nil }
+        return uniqueFilenames(from: allPhotos.map {
+            PhotoEntry(photoKitId: $0.photoKitId!, preferredPath: $0.preferredPath!, contentHash: $0.contentHash, created: $0.created)
+        })
+    }
 
-        let allPhotos = try Photo.matching(nil, in: context)
-            .filter { $0.preferredPath != nil }
-            .sorted { (lhs, rhs) -> Bool in
-                if let ld = lhs.created, let rd = rhs.created, ld != rd {
-                    return ld < rd
-                }
-                return lhs.photoKitId < rhs.photoKitId
-            }
-
-        var allAssignedPaths = Set<String>()
-        return allPhotos.map { photo in
+    /// Pure deduplication logic, separated from CoreData for testability.
+    static func uniqueFilenames(from photos: [PhotoEntry]) -> [PhotoMapping] {
+        let sorted = photos.sorted { lhs, rhs in
+            if let ld = lhs.created, let rd = rhs.created, ld != rd { return ld < rd }
+            return lhs.photoKitId < rhs.photoKitId
+        }
+        var assigned = Set<String>()
+        return sorted.map { photo in
             // Photos makes no attempt to keep filenames unique. Keep appending a number to the
-            // filename until we get something unique. Remember that files systems are
+            // filename until we get something unique. Remember that file systems are
             // often not case sensitive!
-            var path = photo.preferredPath!
-            while allAssignedPaths.contains(path.lowercased()) {
+            var path = photo.preferredPath
+            while assigned.contains(path.lowercased()) {
                 path = path.incrementFilenameMagicNumber()
             }
-            allAssignedPaths.insert(path.lowercased())
+            assigned.insert(path.lowercased())
             return PhotoMapping(photoKitId: photo.photoKitId, path: path, contentHash: photo.contentHash)
         }
     }
