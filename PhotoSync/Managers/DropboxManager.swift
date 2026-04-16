@@ -37,7 +37,7 @@ class DropboxManager {
     
     func internalSync() async throws {
         // The dropbox API doesn't ever return the total file count.
-        let state = progressManager.createTask(named: "Dropbox", total: nil)
+        let state = progressManager.createTask(named: "Dropbox", total: nil, category: .fetch)
 
         // Try to resume a previous run if possible
         let lastCursor = try await database.perform { context in

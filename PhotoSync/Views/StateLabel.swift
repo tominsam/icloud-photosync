@@ -2,13 +2,14 @@ import SwiftUI
 
 struct StateLabel: View {
     let leading: String
-    let state: TaskProgress
+    let state: TaskProgress?
 
     var body: some View {
         HStack {
             Text(leading).bold()
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Text(state.stringState)
+            Text(state?.stringState ?? "")
+                .monospacedDigit()
         }
         .padding([.leading, .trailing])
         .padding([.top, .bottom], 12)
@@ -16,9 +17,9 @@ struct StateLabel: View {
         .background {
             // background is a progress bar that fills up behind the label
             GeometryReader { metrics in
-                if let progress = state.progressPercent {
+                if let progress = state?.progressPercent {
                     Color.green
-                        .opacity(state.complete ? 0.1 : 0.3)
+                        .opacity(state?.complete == true ? 0.1 : 0.3)
                         .frame(width: metrics.size.width * progress)
                 }
             }
@@ -49,7 +50,7 @@ private extension TaskProgress {
         if total == 0 || total == nil {
             return nil
         }
-        return Double(progress) / Double(total ?? 1)
+        return max(Double(progress) / Double(total ?? 1), 0)
     }
 }
 
@@ -69,7 +70,7 @@ private func makeState(
     total: Int? = 10,
     complete: Bool = false
 ) -> TaskProgress {
-    let state = ProgressManager().createTask(named: "Demo", total: total)
+    let state = ProgressManager().createTask(named: "Demo", total: total, category: .fetch)
     state.progress = progress
     if complete {
         state.setComplete()

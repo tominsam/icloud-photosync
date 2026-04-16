@@ -55,14 +55,14 @@ class UploadManager {
     /// so counts are visible in the UI immediately.
     func plan() async throws -> SyncPlan {
         // new images that need to be uploaded
-        let uploadState = progressManager.createTask(named: "New")
+        let uploadState = progressManager.createTask(named: "New", category: .upload)
         // locally changed images need to be replaced
-        let replacementState = progressManager.createTask(named: "Updated")
+        let replacementState = progressManager.createTask(named: "Updated", category: .upload)
         // We don't have content hashes for these images, we'll need to fetch them from photokit.
-        let unknownState = progressManager.createTask(named: "Unknown")
+        let unknownState = progressManager.createTask(named: "Unknown", category: .upload)
         // removed locally, delete from dropbox. We do that _last_, only remove files once
         // we've uploaded everything to minimize potential for loss
-        let deletionState = progressManager.createTask(named: "Deleted")
+        let deletionState = progressManager.createTask(named: "Deleted", category: .upload)
 
         // this can take a few seconds for large libraries, but it's
         // not worth trying to share with PhotoKitManager

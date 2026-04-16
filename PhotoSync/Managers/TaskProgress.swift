@@ -5,9 +5,15 @@ import Foundation
 /// The progress of a single task. Mutating this will update listeners on the progressManager.
 @Observable
 final class TaskProgress: Identifiable, @unchecked Sendable {
-    
+
+    enum TaskCategory {
+        case fetch
+        case upload
+    }
+
     let id: UUID
     let name: String
+    let category: TaskCategory
     
     /// Int progress towards the goal
     var progress: Int = 0
@@ -21,10 +27,12 @@ final class TaskProgress: Identifiable, @unchecked Sendable {
     fileprivate init(
         name: String,
         total: Int?,
+        category: TaskCategory
     ) {
         self.id = UUID()
         self.name = name
         self.total = total
+        self.category = category
     }
 
     /// Calling this will remove the task from the manager
@@ -51,8 +59,8 @@ final class ProgressManager {
     
     init() {}
     
-    func createTask(named name: String, total: Int? = nil) -> TaskProgress {
-        let newState = TaskProgress(name: name, total: total)
+    func createTask(named name: String, total: Int? = nil, category: TaskProgress.TaskCategory) -> TaskProgress {
+        let newState = TaskProgress(name: name, total: total, category: category)
         states.append(newState)
         watchForRemoval(newState)
         return newState

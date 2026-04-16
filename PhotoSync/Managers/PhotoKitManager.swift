@@ -43,7 +43,7 @@ class PhotoKitManager {
     }
     
     func internalSync() async throws {
-        let state = progressManager.createTask(named: "Local photos")
+        let state = progressManager.createTask(named: "Local photos", category: .fetch)
         let count = await database.perform { Photo.count(in: $0) }
         let firstSync = count == 0
         

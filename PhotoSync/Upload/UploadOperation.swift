@@ -49,8 +49,8 @@ class UploadOperation {
     ) async -> [FinishResult] {
         // Create as a pair so they're next to each other
         batchNumber += 1
-        let fetchState = progressManager.createTask(named: "Fetch chunk \(batchNumber)", total: tasks.count)
-        let uploadState = progressManager.createTask(named: "Upload chunk \(batchNumber)", total: tasks.count)
+        let fetchState = progressManager.createTask(named: "Fetch chunk \(batchNumber)", total: tasks.count, category: .upload)
+        let uploadState = progressManager.createTask(named: "Upload chunk \(batchNumber)", total: tasks.count, category: .upload)
         defer {
             fetchState.remove()
             uploadState.remove()
