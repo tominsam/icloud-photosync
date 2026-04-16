@@ -66,6 +66,10 @@ final class ProgressManager {
         return newState
     }
     
+    func reset() {
+        states = []
+    }
+
     func watchForRemoval(_ progress: TaskProgress) {
         withObservationTracking {
             if let total = progress.total, total < 0 {

@@ -14,11 +14,24 @@ struct ServiceError: Identifiable, Sendable {
     let error: Error?
 }
 
+@MainActor
+protocol SyncCoordinator: Observable {
+    var pendingPlan: UploadManager.SyncPlan? { get }
+    var isLoggedIn: Bool { get }
+    var dropboxEmail: String? { get }
+    var errors: [ServiceError] { get }
+    var states: [TaskProgress] { get }
+    
+    func connectDropbox()
+    func disconnectDropbox()
+    func confirmPlan()
+}
+
 /// Master coordinator for the whole sync operation, tracks state, and it's also the view
 /// model because i am very good at architecture.
 @MainActor
 @Observable
-class SyncCoordinator {
+class SyncCoordinatorImpl: SyncCoordinator {
     static let tempDir = URL(
         fileURLWithPath: NSTemporaryDirectory(),
         isDirectory: true
@@ -35,10 +48,11 @@ class SyncCoordinator {
 
     // set while waiting for the user to confirm a planned sync
     var pendingPlan: UploadManager.SyncPlan?
-    private var planContinuation: CheckedContinuation<Bool, Never>?
+    private var planContinuation: CheckedContinuation<Void, Never>?
 
     // UI state
     var isLoggedIn: Bool = false
+    var dropboxEmail: String?
     var errors: [ServiceError] = []
     var states: [TaskProgress] { progressManager.states }
 
@@ -54,6 +68,13 @@ class SyncCoordinator {
         isLoggedIn = dropboxClient != nil
         guard isLoggedIn else { return }
         guard PhotoKitManager.hasPermission else { return }
+        if dropboxEmail == nil {
+            Task {
+                if let account = try? await dropboxClient?.users.getCurrentAccount().asyncResponse() {
+                    dropboxEmail = account.email
+                }
+            }
+        }
         guard syncTask == nil else { return }
         syncTask = Task {
             defer { syncTask = nil }
@@ -62,14 +83,7 @@ class SyncCoordinator {
     }
     
     func confirmPlan() {
-        planContinuation?.resume(returning: true)
-        planContinuation = nil
-        pendingPlan = nil
-    }
-
-    func cancelPlan() {
-        pendingPlan?.removeStates()
-        planContinuation?.resume(returning: false)
+        planContinuation?.resume()
         planContinuation = nil
         pendingPlan = nil
     }
@@ -94,8 +108,8 @@ class SyncCoordinator {
         }
         
         // Clear out anything we left in temp from the last run
-        try? FileManager.default.createDirectory(at: SyncCoordinator.tempDir, withIntermediateDirectories: true)
-        if let tempFiles = try? FileManager.default.contentsOfDirectory(at: SyncCoordinator.tempDir, includingPropertiesForKeys: nil) {
+        try? FileManager.default.createDirectory(at: SyncCoordinatorImpl.tempDir, withIntermediateDirectories: true)
+        if let tempFiles = try? FileManager.default.contentsOfDirectory(at: SyncCoordinatorImpl.tempDir, includingPropertiesForKeys: nil) {
             for file in tempFiles {
                 do {
                     try FileManager.default.removeItem(at: file)
@@ -153,11 +167,10 @@ class SyncCoordinator {
         }
 
         if !plan.isEmpty {
-            let confirmed = await withCheckedContinuation { continuation in
+            await withCheckedContinuation { continuation in
                 self.pendingPlan = plan
                 self.planContinuation = continuation
             }
-            guard confirmed else { return }
         }
 
         NSLog("%@", "Starting upload")
@@ -180,7 +193,7 @@ class SyncCoordinator {
 
         let scopeRequest = ScopeRequest(
             scopeType: .user,
-            scopes: ["files.metadata.read", "files.content.write"],
+            scopes: ["files.metadata.read", "files.content.write", "account_info.read"],
             includeGrantedScopes: false
         )
         DropboxClientsManager.authorizeFromControllerV2(
@@ -194,7 +207,11 @@ class SyncCoordinator {
     
     func disconnectDropbox() {
         syncTask?.cancel()
+        syncTask = nil
         DropboxClientsManager.unlinkClients()
         isLoggedIn = false
+        dropboxEmail = nil
+        progressManager.reset()
+        pendingPlan = nil
     }
 }

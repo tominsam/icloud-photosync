@@ -6,7 +6,7 @@ import SwiftyDropbox
 struct PhotoSyncApp: App {
     @Environment(\.scenePhase) private var scenePhase
 
-    let syncCoordinator = SyncCoordinator(database: Database())
+    let syncCoordinator = SyncCoordinatorImpl(database: Database())
 
     @State private var errorMessage: String?
 
@@ -16,9 +16,7 @@ struct PhotoSyncApp: App {
 
     var body: some Scene {
         WindowGroup {
-            NavigationStack {
-                StatusView(syncCoordinator: syncCoordinator)
-            }
+            StatusView(syncCoordinator: syncCoordinator)
             .onOpenURL { url in
                 // deep link back from the dropbox client for auth
                 DropboxClientsManager.handleRedirectURL(url, includeBackgroundClient: false) { authResult in

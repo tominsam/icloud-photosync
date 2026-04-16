@@ -21,7 +21,7 @@ targets:
         TARGETED_DEVICE_FAMILY: "1,2" # iPhone and iPad
         PRODUCT_BUNDLE_IDENTIFIER: org.movieos.photosync
         DEVELOPMENT_TEAM: 76AFK3W7M9
-        SUPPORTS_MACCATALYST: YES
+        SUPPORTS_MACCATALYST: NO
       debug:
       release:
     sources:
