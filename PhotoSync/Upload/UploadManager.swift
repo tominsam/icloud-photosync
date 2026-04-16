@@ -28,20 +28,35 @@ class UploadManager {
         self.errorUpdate = errorUpdate
     }
 
-    func sync() async {
-        do {
-            try await internalSync()
-        } catch {
-            recordError(error.localizedDescription)
+    struct SyncPlan {
+        let uploads: [UploadOperation.UploadTask]
+        let replacements: [UploadOperation.UploadTask]
+        let unknown: [UploadOperation.UploadTask]
+        let deletions: [DeleteOperation.DeleteTask]
+        let uploadState: TaskProgress
+        let replacementState: TaskProgress
+        let unknownState: TaskProgress
+        let deletionState: TaskProgress
+
+        var isEmpty: Bool {
+            uploads.isEmpty && replacements.isEmpty && unknown.isEmpty && deletions.isEmpty
+        }
+
+        func removeStates() {
+            uploadState.remove()
+            replacementState.remove()
+            unknownState.remove()
+            deletionState.remove()
         }
     }
-    
-    func internalSync() async throws {
-        // Create all the state objects first so we update the UI.
-        
+
+    /// Categorizes all work to be done without performing any uploads or deletions.
+    /// The returned plan's TaskProgress objects are already registered with the ProgressManager
+    /// so counts are visible in the UI immediately.
+    func plan() async throws -> SyncPlan {
         // new images that need to be uploaded
         let uploadState = progressManager.createTask(named: "New")
-        // locally changed images need to be replaces
+        // locally changed images need to be replaced
         let replacementState = progressManager.createTask(named: "Updated")
         // We don't have content hashes for these images, we'll need to fetch them from photokit.
         let unknownState = progressManager.createTask(named: "Unknown")
@@ -73,23 +88,45 @@ class UploadManager {
         unknownState.total = unknown.count
         deletionState.total = deletions.count
 
+        return SyncPlan(
+            uploads: uploads,
+            replacements: replacements,
+            unknown: unknown,
+            deletions: deletions,
+            uploadState: uploadState,
+            replacementState: replacementState,
+            unknownState: unknownState,
+            deletionState: deletionState
+        )
+    }
+
+    /// Performs the uploads and deletions described in the plan.
+    func execute(plan: SyncPlan) async {
+        do {
+            try await internalExecute(plan: plan)
+        } catch {
+            recordError(error.localizedDescription)
+        }
+    }
+
+    private func internalExecute(plan: SyncPlan) async throws {
         // prioritize new files - we have the file locally but there's nothing
         // in dropbox with that path. These are therefore new photos and are
         // the most important to back up
-        await uploads.chunked(into: 10).parallelMap(maxJobs: 2) { chunk in
+        await plan.uploads.chunked(into: 10).parallelMap(maxJobs: 2) { chunk in
             await self.upload(chunk)
-            uploadState.progress += chunk.count
+            plan.uploadState.progress += chunk.count
         }
-        uploadState.setComplete()
+        plan.uploadState.setComplete()
 
         // then upload changed files - they exist in dropbox, but the content hash
         // is changed. These are edits - probably not that important but also
-        // there are naver very many of these.
-        await replacements.chunked(into: 10).parallelMap(maxJobs: 2) { chunk in
+        // there are never very many of these.
+        await plan.replacements.chunked(into: 10).parallelMap(maxJobs: 2) { chunk in
             await self.upload(chunk)
-            replacementState.progress += chunk.count
+            plan.replacementState.progress += chunk.count
         }
-        replacementState.setComplete()
+        plan.replacementState.setComplete()
 
         // "unknown" files are files where we don't have content hashes locally. This
         // generally also means edits most of the time, or something happened to
@@ -98,20 +135,20 @@ class UploadManager {
         // it's cheap to process, though - the files probably exist remotely, so we don't
         // need to do uploading here, we just need to fetch the original from photokit
         // and get the hash.
-        await unknown.chunked(into: 10).parallelMap(maxJobs: 2) { chunk in
+        await plan.unknown.chunked(into: 10).parallelMap(maxJobs: 2) { chunk in
             await self.upload(chunk)
-            unknownState.progress += chunk.count
+            plan.unknownState.progress += chunk.count
         }
-        unknownState.setComplete()
-        
+        plan.unknownState.setComplete()
+
         // then delete removed files (don't need parallel here, the server
         // batch call is fast enough). Do this last, so that we're not deleting
         // things until all the proper backing up is done.
-        for chunk in deletions.chunked(into: 400) {
+        for chunk in plan.deletions.chunked(into: 400) {
             await self.delete(chunk)
-            uploadState.progress += chunk.count
+            plan.deletionState.progress += chunk.count
         }
-        deletionState.setComplete()
+        plan.deletionState.setComplete()
 
         NSLog("%@", "Upload complete")
     }

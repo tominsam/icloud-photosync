@@ -33,6 +33,10 @@ class SyncCoordinator {
     // set if there's a sync running
     var syncTask: Task<Void, Never>?
 
+    // set while waiting for the user to confirm a planned sync
+    var pendingPlan: UploadManager.SyncPlan?
+    private var planContinuation: CheckedContinuation<Bool, Never>?
+
     // UI state
     var isLoggedIn: Bool = false
     var errors: [ServiceError] = []
@@ -57,6 +61,19 @@ class SyncCoordinator {
         }
     }
     
+    func confirmPlan() {
+        planContinuation?.resume(returning: true)
+        planContinuation = nil
+        pendingPlan = nil
+    }
+
+    func cancelPlan() {
+        pendingPlan?.removeStates()
+        planContinuation?.resume(returning: false)
+        planContinuation = nil
+        pendingPlan = nil
+    }
+
     func logError(_ error: ServiceError) {
         NSLog("%@", "[ERROR] \(error.message): \(error.path)")
         errors.append(error)
@@ -126,8 +143,25 @@ class SyncCoordinator {
             return
         }
         
+        NSLog("%@", "Planning upload")
+        let plan: UploadManager.SyncPlan
+        do {
+            plan = try await uploadManager.plan()
+        } catch {
+            logError(ServiceError(path: "/", message: error.localizedDescription, error: error))
+            return
+        }
+
+        if !plan.isEmpty {
+            let confirmed = await withCheckedContinuation { continuation in
+                self.pendingPlan = plan
+                self.planContinuation = continuation
+            }
+            guard confirmed else { return }
+        }
+
         NSLog("%@", "Starting upload")
-        await uploadManager.sync()
+        await uploadManager.execute(plan: plan)
         
         // resync dropbox at the end to get the newly-uploaded files
         await dropboxManager.sync()

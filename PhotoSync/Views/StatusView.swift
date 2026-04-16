@@ -17,6 +17,16 @@ struct StatusView: View {
                     StateLabel(leading: state.name, state: state)
                 })
 
+                if syncCoordinator.pendingPlan != nil {
+                    HStack {
+                        Button("Proceed", action: syncCoordinator.confirmPlan)
+                            .buttonStyle(.borderedProminent)
+                        Button("Cancel", role: .cancel, action: syncCoordinator.cancelPlan)
+                            .buttonStyle(.bordered)
+                    }
+                    .padding()
+                }
+
                 Divider()
                     .padding([.leading, .trailing])
 
