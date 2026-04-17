@@ -19,7 +19,7 @@ struct StateLabel: View {
             GeometryReader { metrics in
                 if let progress = state?.progressPercent {
                     Color.green
-                        .opacity(state?.complete == true ? 0.1 : 0.3)
+                        .opacity(state?.opacity ?? 0)
                         .frame(width: metrics.size.width * progress)
                 }
             }
@@ -31,7 +31,7 @@ struct StateLabel: View {
 private extension TaskProgress {
     var stringState: String {
         if complete {
-            if let total {
+            if let total, total >= 0 {
                 return "Complete (\(total))"
             } else {
                 return "Complete"
@@ -51,6 +51,17 @@ private extension TaskProgress {
             return nil
         }
         return max(Double(progress) / Double(total ?? 1), 0)
+    }
+    
+    var opacity: Double {
+        guard let total else { return 0 }
+        if total < 0 {
+            return 0.3
+        } else if complete {
+            return 0.1
+        } else {
+            return 0.3
+        }
     }
 }
 

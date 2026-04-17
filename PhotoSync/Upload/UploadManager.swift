@@ -56,10 +56,16 @@ class UploadManager {
     func plan() async throws -> SyncPlan {
         // new images that need to be uploaded
         let uploadState = progressManager.createTask(named: "New", category: .upload)
+        try await Task.sleep(for: .milliseconds(100))
+
         // locally changed images need to be replaced
         let replacementState = progressManager.createTask(named: "Updated", category: .upload)
+        try await Task.sleep(for: .milliseconds(100))
+
         // We don't have content hashes for these images, we'll need to fetch them from photokit.
         let unknownState = progressManager.createTask(named: "Unknown", category: .upload)
+        try await Task.sleep(for: .milliseconds(100))
+
         // removed locally, delete from dropbox. We do that _last_, only remove files once
         // we've uploaded everything to minimize potential for loss
         let deletionState = progressManager.createTask(named: "Deleted", category: .upload)
