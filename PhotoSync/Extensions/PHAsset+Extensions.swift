@@ -281,7 +281,7 @@ extension PHImageManager {
     func getAVAsset(for asset: PHAsset) async throws -> AVAsset {
         return try await withCheckedThrowingContinuation { continuation in
             let options = PHVideoRequestOptions()
-            options.deliveryMode = .highQualityFormat
+            //options.deliveryMode = .highQualityFormat
             //options.version = .current // save out edited versions (or original if no edits)
             options.version = .original
             options.isNetworkAccessAllowed = true // download if required

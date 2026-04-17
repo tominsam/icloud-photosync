@@ -7,6 +7,7 @@ import Photos
 // Protocol allows mocking for tests
 protocol PhotoProtocol {
     var photoKitId: String! { get }
+    var cloudIdentifier: String? { get }
     var created: Date? { get }
     var preferredPath: String? { get }
     var contentHash: String? { get }
@@ -24,6 +25,7 @@ class Photo: NSManagedObject, ManagedObject, PhotoProtocol {
     ]
 
     // Properties from photokit
+    @NSManaged var cloudIdentifier: String?
     @NSManaged var photoKitId: String!
     @NSManaged var created: Date?
     @NSManaged var modified: Date?
@@ -51,17 +53,37 @@ extension Photo {
     @discardableResult
     static func insertOrUpdate(_ assets: [PHAssetProtocol], into context: NSManagedObjectContext) throws -> ([Photo], Bool) {
         guard !assets.isEmpty else { return ([], false) }
+
+        let localIds: [String] = assets.map { $0.localIdentifier }
         // dict of photo ID -> photo of existing DB objects
         let existing = try Photo.matching(
             "photoKitId IN (%@)",
-            args: [assets.map { $0.localIdentifier }],
+            args: [localIds],
             in: context
         ).uniqueBy(\.photoKitId)
+
+        // Fetch the cloud IDs for photos where we need that (photoKitID can vary between
+        // device so it's no good for deterministic sorting)
+        let missingCloudkitIds: [String] = existing.keys.filter { existing[$0]?.cloudIdentifier == nil }.compactMap(\.self)
+        let cloudIds: [String: Result<PHCloudIdentifier, any Error>]
+        if missingCloudkitIds.isEmpty {
+            cloudIds = [:]
+        } else {
+            NSLog("%@", "Need to load cloudkit IDs for \(missingCloudkitIds)")
+            cloudIds = PHPhotoLibrary.shared().cloudIdentifierMappings(forLocalIdentifiers: missingCloudkitIds)
+        }
 
         var changed = false
         let photos = assets.map { asset in
             let photo = existing[asset.localIdentifier] ?? context.insertObject()
             if photo.update(from: asset) {
+                changed = true
+            }
+            if photo.cloudIdentifier == nil {
+                guard case .success(let cloudId) = cloudIds[asset.localIdentifier] else {
+                    fatalError()
+                }
+                photo.cloudIdentifier = cloudId.stringValue
                 changed = true
             }
             return photo
@@ -103,7 +125,12 @@ extension Photo {
     /// Pure deduplication logic, separated from CoreData for testability.
     static func uniqueFilenames(from photos: [PhotoProtocol]) -> [PhotoMapping] {
         let sorted = photos.filter { $0.preferredPath != nil }.sorted { lhs, rhs in
-            if let ld = lhs.created, let rd = rhs.created, ld != rd { return ld < rd }
+            // The output order of this function _must_ be deterministic! I have to
+            // round the dates because different OS versions will return non-zero
+            // nanoseconds, but the files we write have integer mtimes.
+            if let lc = lhs.created?.integral(), let rc = rhs.created?.integral(), lc != rc { return lc < rc }
+            //if let lm = lhs.modified?.integral(), let rm = rhs.modified?.integral(), lm != rm { return lm < rm }
+            if let li = lhs.cloudIdentifier, let ri = rhs.cloudIdentifier, li != ri { return li < ri }
             return lhs.photoKitId < rhs.photoKitId
         }
         var assigned = Set<String>()
@@ -132,17 +159,19 @@ extension Photo {
         if modified == nil || asset.modificationDate == nil || abs(modified!.timeIntervalSinceReferenceDate - asset.modificationDate!.timeIntervalSinceReferenceDate) > 20 {
             // if the file has been changed, invalidate the content hash
             // and the path (because you can change the date on photos, and
-            // even though we're exporting the original, we're changing the exif
-            // date if it's been edited)
+            // even though we're exporting the original, the destination path
+            // will use the edited date)
             filename = nil
             contentHash = nil
             preferredPath = nil
+            cloudIdentifier = nil
             modified = asset.modificationDate
             changed = true
         }
 
         if filename == nil {
-            filename = asset.filename?.stripFilenameMagicNumber() // slow!
+            filename = asset.filename? // slow!
+                .stripFilenameMagicNumber()
             changed = true
         }
 
@@ -199,5 +228,12 @@ extension String {
 
         // Glue the path back together
         return ((prefix as NSString).appendingPathComponent(filename + suffix) as NSString).appendingPathExtension(pathExtension.lowercased())!
+    }
+}
+
+extension Date {
+    func integral() -> Date {
+        let cal = Calendar.current
+        return cal.date(bySetting: .nanosecond, value: 0, of: self) ?? self
     }
 }
