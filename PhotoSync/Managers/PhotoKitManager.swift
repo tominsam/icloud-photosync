@@ -15,6 +15,8 @@ class PhotoKitManager {
     let progressManager: ProgressManager
     private let errorUpdate: (ServiceError) -> Void
 
+    var allAssets: [PHAssetProtocol]?
+    
     init(database: Database, progressManager: ProgressManager, errorUpdate: @escaping (ServiceError) -> Void) {
         self.database = database
         self.progressManager = progressManager
@@ -100,6 +102,8 @@ class PhotoKitManager {
             }
             try context.save(andReset: true)
         }
+
+        self.allAssets = allAssets
         state.setComplete()
     }
 }

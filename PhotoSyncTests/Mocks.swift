@@ -2,10 +2,13 @@
 
 import Foundation
 import Photos
+import UIKit
+
 @testable import PhotoSync
 
 struct MockPhoto: PhotoProtocol {
     let photoKitId: String!
+    let cloudIdentifier: String?
     let created: Date?
     let preferredPath: String?
     let contentHash: String?
@@ -34,6 +37,7 @@ struct MockAsset: PHAssetProtocol {
 func mockPhoto(_ id: String, _ path: String, created: TimeInterval? = nil, hash: String? = nil) -> MockPhoto {
     MockPhoto(
         photoKitId: id,
+        cloudIdentifier: id,
         created: created.map { Date(timeIntervalSinceReferenceDate: $0) },
         preferredPath: path,
         contentHash: hash

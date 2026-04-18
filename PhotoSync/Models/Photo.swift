@@ -64,7 +64,9 @@ extension Photo {
 
         // Fetch the cloud IDs for photos where we need that (photoKitID can vary between
         // device so it's no good for deterministic sorting)
-        let missingCloudkitIds: [String] = existing.keys.filter { existing[$0]?.cloudIdentifier == nil }.compactMap(\.self)
+        let needsCloudkitIds: [String] = existing.keys.filter { existing[$0]?.cloudIdentifier == nil }.compactMap(\.self)
+        let newCloudkitIds: [String] = assets.filter { existing[$0.localIdentifier] == nil }.map(\.localIdentifier)
+        let missingCloudkitIds = newCloudkitIds + needsCloudkitIds
         let cloudIds: [String: Result<PHCloudIdentifier, any Error>]
         if missingCloudkitIds.isEmpty {
             cloudIds = [:]
@@ -80,11 +82,13 @@ extension Photo {
                 changed = true
             }
             if photo.cloudIdentifier == nil {
-                guard case .success(let cloudId) = cloudIds[asset.localIdentifier] else {
-                    fatalError()
+                if case .success(let cloudId) = cloudIds[asset.localIdentifier] {
+                    photo.cloudIdentifier = cloudId.stringValue
+                    changed = true
+                } else {
+                    print("No cloudID for photo!")
+                    //fatalError()
                 }
-                photo.cloudIdentifier = cloudId.stringValue
-                changed = true
             }
             return photo
         }
@@ -164,7 +168,6 @@ extension Photo {
             filename = nil
             contentHash = nil
             preferredPath = nil
-            cloudIdentifier = nil
             modified = asset.modificationDate
             changed = true
         }
@@ -233,7 +236,7 @@ extension String {
 
 extension Date {
     func integral() -> Date {
-        let cal = Calendar.current
-        return cal.date(bySetting: .nanosecond, value: 0, of: self) ?? self
+        // this is waaaay faster than doing it properly with Calendar and we need this to be fast.
+        Date(timeIntervalSince1970: floor(self.timeIntervalSince1970))
     }
 }

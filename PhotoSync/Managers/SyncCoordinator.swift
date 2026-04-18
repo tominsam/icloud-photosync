@@ -152,7 +152,7 @@ class SyncCoordinatorImpl: SyncCoordinator {
         }
 
         // Those both need to have passed otherwise it's not safe to do any writes.
-        if !errors.isEmpty {
+        guard errors.isEmpty, let allAssets = photoManager.allAssets else {
             logError(ServiceError(path: "/", message: "Sync failed, aborting upload", error: nil))
             return
         }
@@ -160,7 +160,7 @@ class SyncCoordinatorImpl: SyncCoordinator {
         NSLog("%@", "Planning upload")
         let plan: UploadManager.SyncPlan
         do {
-            plan = try await uploadManager.plan()
+            plan = try await uploadManager.plan(allAssets: allAssets)
         } catch {
             logError(ServiceError(path: "/", message: error.localizedDescription, error: error))
             return

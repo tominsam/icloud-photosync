@@ -53,7 +53,7 @@ class UploadManager {
     /// Categorizes all work to be done without performing any uploads or deletions.
     /// The returned plan's TaskProgress objects are already registered with the ProgressManager
     /// so counts are visible in the UI immediately.
-    func plan() async throws -> SyncPlan {
+    func plan(allAssets: [PHAssetProtocol]) async throws -> SyncPlan {
         let planningState = progressManager.createTask(named: "Planning", total: 5, category: .upload)
         try await Task.sleep(for: .milliseconds(100))
 
@@ -73,15 +73,12 @@ class UploadManager {
         // we've uploaded everything to minimize potential for loss
         let deletionState = progressManager.createTask(named: "Deleted", category: .upload)
 
-        // this can take a few seconds for large libraries, but it's
-        // not worth trying to share with PhotoKitManager
-        let allAssets = await PHAsset.allAssets
         planningState.progress += 1
 
         // Group every photo into categories based on if we need to upload it as a new
         // file, or a changed file, or delete it
         let (changes, deletions) = try await database.perform { context in
-            // Everything we _want_ to upload in order
+            // Everything we _want_ to upload in order (this is expensive)
             let allPhotos = try Photo.allPhotosWithUniqueFilenames(in: context)
             planningState.progress += 1
             // All the files we know about remotely, accessible by path.
