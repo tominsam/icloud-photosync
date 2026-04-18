@@ -1,6 +1,7 @@
 // Copyright 2020 Thomas Insam. All rights reserved.
 
 import Photos
+import UIKit
 
 /// Various possible representations of a fetched PHAsset.
 enum AssetData {
@@ -62,6 +63,7 @@ protocol PHAssetProtocol {
     var filename: String? { get }
 
     func getImageData(version: PHImageRequestOptionsVersion) async throws -> AssetData
+    func thumbnail(size: CGSize) async -> UIImage?
 }
 
 extension PHAsset: PHAssetProtocol {
@@ -125,6 +127,19 @@ extension PHAsset: PHAssetProtocol {
             throw AssetError.fetch("Unknown asset type \(type(of: avAsset))", nil)
         default:
             throw AssetError.mediaType(mediaType)
+        }
+    }
+
+    func thumbnail(size: CGSize) async -> UIImage? {
+        let manager = PHImageManager.default()
+        let options = PHImageRequestOptions()
+        options.deliveryMode = .fastFormat
+        options.isNetworkAccessAllowed = false
+        options.isSynchronous = false
+        return await withCheckedContinuation { continuation in
+            manager.requestImage(for: self, targetSize: size, contentMode: .aspectFill, options: options) { image, _ in
+                continuation.resume(returning: image)
+            }
         }
     }
 }

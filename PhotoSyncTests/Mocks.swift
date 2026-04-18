@@ -27,6 +27,8 @@ struct MockAsset: PHAssetProtocol {
     func getImageData(version: PHImageRequestOptionsVersion) async throws -> AssetData {
         throw AssetError.fetch("mock", nil)
     }
+
+    func thumbnail(size: CGSize) async -> UIImage? { nil }
 }
 
 func mockPhoto(_ id: String, _ path: String, created: TimeInterval? = nil, hash: String? = nil) -> MockPhoto {

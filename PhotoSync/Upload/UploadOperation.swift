@@ -50,6 +50,7 @@ class UploadOperation {
         // Create as a pair so they're next to each other
         batchNumber += 1
         let fetchState = progressManager.createTask(named: "Fetch chunk \(batchNumber)", total: tasks.count, category: .upload)
+        fetchState.assets = tasks.map(\.asset)
         let uploadState = progressManager.createTask(named: "Upload chunk \(batchNumber)", total: tasks.count, category: .upload)
         defer {
             fetchState.remove()
@@ -70,7 +71,7 @@ class UploadOperation {
             return data
         }
         fetchState.setComplete()
-        
+
         // concurrently upload all the files
         //let uploadResults = await withTaskGroup(of: UploadResult.self) { group -> [UploadResult] in
         var uploadResults = [UploadResult]()

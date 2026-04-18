@@ -28,13 +28,15 @@ struct ErrorList: View {
     var errors: [ServiceError]
 
     var body: some View {
-        Text("Errors")
-            .font(.title)
-            .padding()
-
-        ForEach(errors, id: \.id) { error in
-            Text(error.message)
-                .padding(.horizontal)
+        if !errors.isEmpty {
+            Text("Errors")
+                .font(.title)
+                .padding()
+            
+            ForEach(errors, id: \.id) { error in
+                Text(error.message)
+                    .padding(.horizontal)
+            }
         }
     }
 }
@@ -55,22 +57,20 @@ struct SectionView: View {
 
     var body: some View {
         VStack(alignment: .leading) {
-            Text(title)
-                .font(.title)
-                .padding([.leading, .top])
-            
             if !states.isEmpty {
+                Text(title)
+                    .font(.title)
+                    .padding([.leading, .top])
+            
                 ForEach(states) { state in
                     StateLabel(leading: state.name, state: state)
                         .transition(
                             .asymmetric(
-                                insertion: .move(edge: .trailing).animation(.easeOut),
-                                removal: .move(edge: .leading).combined(with: .opacity).animation(.easeIn)
+                                insertion: .move(edge: .bottom).combined(with: .opacity).animation(.easeOut),
+                                removal: .opacity
                             )
                         )
                 }
-            } else {
-                StateLabel(leading: "Waiting", state: nil)
             }
         }.animation(.easeInOut, value: states.map(\.id))
     }
@@ -94,6 +94,7 @@ struct StatusView: View {
                     PlanButtons(confirm: syncCoordinator.confirmPlan)
                 }
             }
+            .padding(.bottom, 300) // for scroll convenience
             .frame(maxWidth: 600)
             .frame(maxWidth: .infinity)
         }

@@ -2,30 +2,49 @@ import SwiftUI
 
 struct StateLabel: View {
     let leading: String
-    let state: TaskProgress?
-
+    let state: TaskProgress
+    
     var body: some View {
-        HStack {
-            Text(leading).bold()
-                .frame(maxWidth: .infinity, alignment: .leading)
-            Text(state?.stringState ?? "")
-                .monospacedDigit()
+        VStack(spacing: 0) {
+            HStack {
+                Text(leading).bold()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text(state.stringState)
+                    .monospacedDigit()
+            }
+            .padding([.leading, .trailing])
+            .padding([.top, .bottom], 12)
+            .fixedSize(horizontal: false, vertical: true)
+            
+            if let assets = state.assets {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(spacing: 4) {
+                        ForEach(assets, id: \.localIdentifier) { asset in
+                            ThumbnailView(asset: asset)
+                        }
+                    }
+                    .padding(.horizontal)
+                    .padding(.bottom, 12)
+                }
+                .frame(height: 68)
+            }
         }
-        .padding([.leading, .trailing])
-        .padding([.top, .bottom], 12)
-        .fixedSize(horizontal: false, vertical: true)
         .background {
             // background is a progress bar that fills up behind the label
             GeometryReader { metrics in
-                if let progress = state?.progressPercent {
+                if let progress = state.progressPercent {
+                    let round = progress < 1 ? 8.0 : 0
                     Color.green
-                        .opacity(state?.opacity ?? 0)
+                        .opacity(state.opacity)
                         .frame(width: metrics.size.width * progress)
+                        .clipShape(UnevenRoundedRectangle(
+                            cornerRadii: .init(topLeading: 0, bottomLeading: 0, bottomTrailing: round, topTrailing: round)))
+                        .animation(.easeOut, value: progress)
                 }
             }
         }
     }
-
+    
 }
 
 private extension TaskProgress {
@@ -42,7 +61,7 @@ private extension TaskProgress {
             return "\(progress) / …"
         }
     }
-
+    
     var progressPercent: Double? {
         if complete {
             return 1

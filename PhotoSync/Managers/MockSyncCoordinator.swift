@@ -5,9 +5,9 @@ import Foundation
 @MainActor
 @Observable
 class MockSyncCoordinator: SyncCoordinator {
-    var pendingPlan: UploadManager.SyncPlan? = nil
+    var pendingPlan: UploadManager.SyncPlan?
     var isLoggedIn: Bool = false
-    var dropboxEmail: String? = nil
+    var dropboxEmail: String?
     var errors: [ServiceError] = []
     var states: [TaskProgress] = []
 

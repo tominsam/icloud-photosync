@@ -1,6 +1,7 @@
 // Copyright 2026 Thomas Insam. All rights reserved.
 
 import Foundation
+import Photos
 
 /// The progress of a single task. Mutating this will update listeners on the progressManager.
 @Observable
@@ -24,6 +25,9 @@ final class TaskProgress: Identifiable, @unchecked Sendable {
     /// If true the task is complete
     var complete: Bool = false
 
+    /// Photos associated with this task, for thumbnail display
+    var assets: [PHAssetProtocol]?
+    
     fileprivate init(
         name: String,
         total: Int?,
