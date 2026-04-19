@@ -6,6 +6,7 @@ import UIKit
 
 struct ThumbnailView: View {
     let asset: PHAssetProtocol
+    var size: CGFloat
 
     @State private var image: UIImage?
 
@@ -19,10 +20,10 @@ struct ThumbnailView: View {
                 Color.secondary.opacity(0.2)
             }
         }
-        .frame(width: 60, height: 60)
+        .frame(width: size, height: size)
         .clipShape(RoundedRectangle(cornerRadius: 4))
-        .task {
-            image = await asset.thumbnail(size: CGSize(width: 180, height: 180))
+        .task(id: asset.localIdentifier) {
+            image = await asset.thumbnail(size: CGSize(width: 100, height: 100))
         }
     }
 }

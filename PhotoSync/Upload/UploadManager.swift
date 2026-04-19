@@ -103,7 +103,7 @@ class UploadManager {
         unknownState.total = unknown.count
         deletionState.total = deletions.count
 
-        planningState.setComplete()
+        planningState.remove()
         
         return SyncPlan(
             uploads: uploads,

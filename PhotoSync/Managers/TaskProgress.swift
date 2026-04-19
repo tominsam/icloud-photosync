@@ -41,6 +41,7 @@ final class TaskProgress: Identifiable, @unchecked Sendable {
 
     /// Calling this will remove the task from the manager
     func remove() {
+        setComplete()
         total = -1
     }
 

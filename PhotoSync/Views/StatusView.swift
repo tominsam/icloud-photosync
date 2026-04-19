@@ -30,8 +30,8 @@ struct ErrorList: View {
     var body: some View {
         if !errors.isEmpty {
             Text("Errors")
-                .font(.title)
-                .padding()
+                .headerStyle()
+                .padding(.horizontal)
             
             ForEach(errors, id: \.id) { error in
                 Text(error.message)
@@ -45,9 +45,12 @@ struct PlanButtons: View {
     var confirm: () -> Void
 
     var body: some View {
-        Button("Proceed", action: confirm)
-            .buttonStyle(.borderedProminent)
-            .padding()
+        Button(action: confirm) {
+            Text("Proceed")
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.borderedProminent)
+        .padding()
     }
 }
 
@@ -56,11 +59,11 @@ struct SectionView: View {
     var states: [TaskProgress]
 
     var body: some View {
-        VStack(alignment: .leading) {
+        VStack(alignment: .leading, spacing: 2) {
             if !states.isEmpty {
                 Text(title)
-                    .font(.title)
-                    .padding([.leading, .top])
+                    .headerStyle()
+                    .padding(.horizontal)
             
                 ForEach(states) { state in
                     StateLabel(leading: state.name, state: state)
@@ -98,37 +101,41 @@ struct StatusView: View {
             .frame(maxWidth: 600)
             .frame(maxWidth: .infinity)
         }
+        .safeAreaBar(edge: .top) {
+            Color.clear.frame(height: 0)
+        }
+    }
+}
+
+extension View {
+    func headerStyle() -> some View {
+        self
+            .font(.headline)
+            .kerning(2)
+            .textCase(.uppercase)
+            .foregroundStyle(.secondary)
+            .padding(.top, 12)
+            .padding(.bottom, 6)
     }
 }
 
 #Preview {
-    let manager = ProgressManager()
     let coordinator = MockSyncCoordinator()
     coordinator.isLoggedIn = true
     coordinator.dropboxEmail = "alice@example.com"
-    let task = manager.createTask(named: "Foo", total: 10, category: .fetch)
-    task.progress = 5
     coordinator.states = [
-        task,
-        manager.createTask(named: "Bar", total: 10, category: .fetch),
-        manager.createTask(named: "Baz", total: 10, category: .upload),
-        manager.createTask(named: "Ning", total: 10, category: .upload),
+        mockTask(progress: 10, category: .fetch),
+        mockTask(progress: 1, category: .fetch),
+        mockTask(progress: 10),
+        mockTask(progress: 10),
+        mockTask(progress: 3),
+        mockTask(progress: 5, withAssets: true),
     ]
     coordinator.errors = [
         ServiceError(path: "/", message: "message", error: nil),
         ServiceError(path: "/", message: "message", error: nil),
         ServiceError(path: "/", message: "message", error: nil),
-        ServiceError(path: "/", message: "message", error: nil),
     ]
-    coordinator.pendingPlan = .init(
-        uploads: [],
-        replacements: [],
-        unknown: [],
-        deletions: [],
-        uploadState: manager.createTask(named: "Upload", category: .upload),
-        replacementState: manager.createTask(named: "Replace", category: .upload),
-        unknownState: manager.createTask(named: "Unknown", category: .upload),
-        deletionState: manager.createTask(named: "Delete", category: .upload),
-    )
+    coordinator.pendingPlan = mockPlan()
     return StatusView(syncCoordinator: coordinator)
 }
