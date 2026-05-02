@@ -12,10 +12,16 @@ final class TaskProgress: Identifiable, @unchecked Sendable {
         case upload
     }
 
+    enum ProgressUnit {
+        case count
+        case bytes
+    }
+
     let id: UUID
     let name: String
     let category: TaskCategory
-    
+    var unit: ProgressUnit = .count
+
     /// Int progress towards the goal
     var progress: Int = 0
 

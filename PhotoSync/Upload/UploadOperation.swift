@@ -38,50 +38,46 @@ class UploadOperation {
         case failure(path: String, message: String, error: Error?)
     }
 
-    // going to number all the batches, so there's some sort of sense of progress
-    // towards the goal in the UI.
-    static var batchNumber = 0
-    
-    static func batchUpload(
+    /// Downloads a chunk of assets from PhotoKit, saves their hashes, and returns only the
+    /// items that actually need uploading (i.e. whose hash differs from the existing remote hash).
+    static func fetchBatch(
         database: Database,
-        dropboxClient: DropboxClient,
         tasks: [UploadTask],
         progressManager: ProgressManager
-    ) async -> [FinishResult] {
-        // Create as a pair so they're next to each other
-        batchNumber += 1
-        let fetchState = progressManager.createTask(named: "Fetch chunk \(batchNumber)", total: tasks.count, category: .upload)
+    ) async -> [(UploadTask, AssetData)] {
+        let fetchState = progressManager.createTask(named: "Fetching", total: tasks.count, category: .upload)
         fetchState.assets = tasks.map(\.asset)
-        let uploadState = progressManager.createTask(named: "Upload chunk \(batchNumber)", total: tasks.count, category: .upload)
-        defer {
-            fetchState.remove()
-            uploadState.remove()
-        }
+        defer { fetchState.remove() }
 
-        // Download all the images, one at a time, in advance.
-        let uploads: [(UploadTask, AssetData)] = await tasks.asyncMap { (task: UploadTask) -> (UploadTask, AssetData)? in
-            fetchState.progress += 1
+        return await tasks.asyncMap { task -> (UploadTask, AssetData)? in
             let data = await download(database: database, asset: task.asset)
+            fetchState.progress += 1
             if data.hash != nil && task.existingContentHash == data.hash {
-                // This means that we've uploaded it before, in another install or whatever -
-                // the db hash equals the newly-calculated file hash, and we can skip it.
-                // Updating the total here looks nicer, because the "upload" task total falls
-                // as we fetch and verify the image contents.
-                uploadState.total! -= 1
+                // Already uploaded — hash matches, nothing to do.
                 return nil
             }
             return (task, data)
         }.compactMap(\.self)
-        assert(uploadState.total == uploads.count)
+    }
 
-        fetchState.setComplete()
+    /// Uploads a batch of pre-fetched items to Dropbox.
+    static func uploadBatch(
+        dropboxClient: DropboxClient,
+        items: [(UploadTask, AssetData)],
+        progressManager: ProgressManager
+    ) async -> [FinishResult] {
+        guard !items.isEmpty else { return [] }
 
-        // concurrently upload all the files
-        //let uploadResults = await withTaskGroup(of: UploadResult.self) { group -> [UploadResult] in
+        let totalBytes = items.reduce(0) { $0 + $1.1.byteSize }
+        let uploadState = progressManager.createTask(named: "Uploading", total: totalBytes, category: .upload)
+        uploadState.unit = .bytes
+        uploadState.assets = items.map(\.0.asset)
+        defer { uploadState.remove() }
+
         var uploadResults = [UploadResult]()
-        for (task, assetData) in uploads {
-            let uploadSession: Files.UploadSessionFinishArg
+        for (task, assetData) in items {
             do {
+                let uploadSession: Files.UploadSessionFinishArg
                 switch assetData {
                 case let .data(data, hash):
                     uploadSession = try await uploadData(
@@ -106,24 +102,16 @@ class UploadOperation {
                     // We exported a video to a temp file, let's clean that up
                     try? FileManager.default.removeItem(at: url)
                 }
-                uploadState.progress += 1
-                uploadResults.append(
-                    .success(task.filename, uploadSession)
-                )
+                uploadState.progress += assetData.byteSize
+                uploadResults.append(.success(task.filename, uploadSession))
             } catch {
-                uploadState.progress += 1
-                uploadResults.append(
-                    .failure(path: task.filename, message: error.localizedDescription, error: error)
-                )
+                uploadState.progress += assetData.byteSize
+                uploadResults.append(.failure(path: task.filename, message: error.localizedDescription, error: error))
             }
         }
-        
-        guard !uploadResults.isEmpty else {
-            // We didn't have to upload anything in this batch (happens a lot, if
-            // we had to invalidate photo hashes for instance.)
-            return []
-        }
-        
+
+        guard !uploadResults.isEmpty else { return [] }
+
         do {
             // Batched dropbox uploads work by uploading several files, then a "finish" call
             // adds them all to the dropbox. We have to work like this or it's trivially easy
@@ -136,27 +124,11 @@ class UploadOperation {
                     return .failure(path: filename, message: error.localizedDescription, error: error)
                 case .unchanged:
                     return .unchanged
-                case .failure(path: let path, message: let message, error: let error):
+                case let .failure(path, message, error):
                     return .failure(path: path, message: message, error: error)
                 }
             }
         }
-    }
-
-    static func fetchHashesOnly(
-        database: Database,
-        tasks: [UploadTask],
-        progressManager: ProgressManager
-    ) async {
-        batchNumber += 1
-        let fetchState = progressManager.createTask(named: "Fetch chunk \(batchNumber)", total: tasks.count, category: .upload)
-        fetchState.assets = tasks.map(\.asset)
-        defer { fetchState.remove() }
-        for task in tasks {
-            _ = await download(database: database, asset: task.asset)
-            fetchState.progress += 1
-        }
-        fetchState.setComplete()
     }
 
     static func download(database: Database, asset: PHAssetProtocol) async -> AssetData {

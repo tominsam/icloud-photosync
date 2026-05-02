@@ -66,14 +66,23 @@ private extension TaskProgress {
     var stringState: String {
         if complete {
             if let total, total >= 0 {
-                return "Complete • \(total)"
+                return "Complete • \(format(total))"
             } else {
                 return "Complete"
             }
         } else if let total {
-            return "\(progress) / \(total)"
+            return "\(format(progress)) / \(format(total))"
         } else {
-            return "\(progress) / …"
+            return "\(format(progress)) / …"
+        }
+    }
+
+    func format(_ value: Int) -> String {
+        switch unit {
+        case .count:
+            return "\(value)"
+        case .bytes:
+            return ByteCountFormatter.string(fromByteCount: Int64(value), countStyle: .binary)
         }
     }
     

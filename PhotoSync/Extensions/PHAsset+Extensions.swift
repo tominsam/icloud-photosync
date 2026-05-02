@@ -14,6 +14,17 @@ enum AssetData {
     /// Represents a failed fetch
     case failure(Error)
 
+    var byteSize: Int {
+        switch self {
+        case .data(let data, _):
+            return data.count
+        case .url(let url, _), .tempUrl(let url, _):
+            return (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        case .failure:
+            return 0
+        }
+    }
+
     /// If fetched, this will be the dropbox content hash of the file, however it's stored.
     var hash: String? {
         switch self {

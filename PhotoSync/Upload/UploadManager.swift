@@ -7,6 +7,38 @@ import Photos
 import SwiftyDropbox
 import UIKit
 
+/// Collects upload-ready items and flushes a batch once the accumulated byte size crosses a threshold.
+private actor UploadAccumulator {
+    private var pending: [(UploadOperation.UploadTask, AssetData)] = []
+    private var pendingBytes: Int = 0
+    private let threshold: Int
+
+    init(threshold: Int = 20 * 1_024 * 1_024) {
+        self.threshold = threshold
+    }
+
+    /// Adds items one at a time, flushing a batch each time the threshold is crossed.
+    /// Returns all batches that became ready (may be more than one if a chunk is large).
+    func add(_ items: [(UploadOperation.UploadTask, AssetData)]) -> [[(UploadOperation.UploadTask, AssetData)]] {
+        var batches: [[(UploadOperation.UploadTask, AssetData)]] = []
+        for item in items {
+            pending.append(item)
+            pendingBytes += item.1.byteSize
+            if pendingBytes >= threshold {
+                batches.append(pending)
+                pending = []
+                pendingBytes = 0
+            }
+        }
+        return batches
+    }
+
+    func flush() -> [(UploadOperation.UploadTask, AssetData)] {
+        defer { pending = []; pendingBytes = 0 }
+        return pending
+    }
+}
+
 /// Manages uploading files - splits files into groups depending on what needs to be done, then
 /// performs the upload until we're in a good state.
 @MainActor
@@ -104,7 +136,7 @@ class UploadManager {
         deletionState.total = deletions.count
 
         planningState.remove()
-        
+
         return SyncPlan(
             uploads: uploads,
             replacements: replacements,
@@ -124,7 +156,7 @@ class UploadManager {
         plan.deletionState.remove()
 
         await plan.unknown.chunked(into: 10).parallelMap(maxJobs: 2) { chunk in
-            await UploadOperation.fetchHashesOnly(
+            _ = await UploadOperation.fetchBatch(
                 database: self.database,
                 tasks: chunk,
                 progressManager: self.progressManager
@@ -147,20 +179,12 @@ class UploadManager {
         // prioritize new files - we have the file locally but there's nothing
         // in dropbox with that path. These are therefore new photos and are
         // the most important to back up
-        await plan.uploads.chunked(into: 10).parallelMap(maxJobs: 2) { chunk in
-            await self.upload(chunk)
-            plan.uploadState.progress += chunk.count
-        }
-        plan.uploadState.setComplete()
+        await runPipeline(tasks: plan.uploads, state: plan.uploadState)
 
         // then upload changed files - they exist in dropbox, but the content hash
         // is changed. These are edits - probably not that important but also
         // there are never very many of these.
-        await plan.replacements.chunked(into: 10).parallelMap(maxJobs: 2) { chunk in
-            await self.upload(chunk)
-            plan.replacementState.progress += chunk.count
-        }
-        plan.replacementState.setComplete()
+        await runPipeline(tasks: plan.replacements, state: plan.replacementState)
 
         // "unknown" files are files where we don't have content hashes locally. This
         // generally also means edits most of the time, or something happened to
@@ -169,11 +193,7 @@ class UploadManager {
         // it's cheap to process, though - the files probably exist remotely, so we don't
         // need to do uploading here, we just need to fetch the original from photokit
         // and get the hash.
-        await plan.unknown.chunked(into: 10).parallelMap(maxJobs: 2) { chunk in
-            await self.upload(chunk)
-            plan.unknownState.progress += chunk.count
-        }
-        plan.unknownState.setComplete()
+        await runPipeline(tasks: plan.unknown, state: plan.unknownState)
 
         // then delete removed files (don't need parallel here, the server
         // batch call is fast enough). Do this last, so that we're not deleting
@@ -187,14 +207,39 @@ class UploadManager {
         NSLog("%@", "Upload complete")
     }
 
-    func upload(_ tasks: [UploadOperation.UploadTask]) async {
-        let finishResults = await UploadOperation.batchUpload(
-            database: database,
+    /// Fetches tasks in parallel chunks of 10, accumulates upload-ready items by byte size,
+    /// and fires an upload batch once 20 MB is queued. A single TaskProgress is created lazily
+    /// when the first upload-worthy item arrives, grows thumbnails during accumulation, then
+    /// transitions to showing upload progress when the batch is handed off.
+    private func runPipeline(tasks: [UploadOperation.UploadTask], state: TaskProgress) async {
+        let accumulator = UploadAccumulator()
+
+        await tasks.chunked(into: 10).parallelMap(maxJobs: 2) { chunk in
+            let ready = await UploadOperation.fetchBatch(
+                database: self.database,
+                tasks: chunk,
+                progressManager: self.progressManager
+            )
+            state.progress += chunk.count
+            for batch in await accumulator.add(ready) {
+                await self.uploadAndRecord(batch)
+            }
+        }
+
+        let remaining = await accumulator.flush()
+        if !remaining.isEmpty {
+            await uploadAndRecord(remaining)
+        }
+        state.setComplete()
+    }
+
+    private func uploadAndRecord(_ items: [(UploadOperation.UploadTask, AssetData)]) async {
+        let results = await UploadOperation.uploadBatch(
             dropboxClient: dropboxClient,
-            tasks: tasks,
+            items: items,
             progressManager: progressManager
         )
-        for result in finishResults {
+        for result in results {
             if case let .failure(path, message, error) = result {
                 recordError(message, path: path, error: error)
             }
