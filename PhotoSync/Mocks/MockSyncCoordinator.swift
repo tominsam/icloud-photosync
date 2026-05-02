@@ -15,7 +15,9 @@ class MockSyncCoordinator: SyncCoordinator {
 
     func connectDropbox() {}
     func disconnectDropbox() { isLoggedIn = false; dropboxEmail = nil }
+    func sync() {}
     func confirmPlan() { pendingPlan = nil }
+    func confirmPlanFetchOnly() { pendingPlan = nil }
 }
 
 @MainActor

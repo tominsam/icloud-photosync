@@ -17,6 +17,7 @@ struct PhotoSyncApp: App {
     var body: some Scene {
         WindowGroup {
             StatusView(syncCoordinator: syncCoordinator)
+            .tint(.green)
             .onOpenURL { url in
                 // deep link back from the dropbox client for auth
                 DropboxClientsManager.handleRedirectURL(url, includeBackgroundClient: false) { authResult in
@@ -40,21 +41,20 @@ struct PhotoSyncApp: App {
             }
             .task {
                 // Startup
-                UIApplication.shared.isIdleTimerDisabled = true
                 requestPhotoPermission()
             }
         }
-        .onChange(of: scenePhase) { _, newPhase in
-            switch newPhase {
-            case .active:
-                UIApplication.shared.isIdleTimerDisabled = true
-            case .background:
-                NSLog("Entering background, \(UIApplication.shared.backgroundTimeRemaining) remaining")
-                UIApplication.shared.isIdleTimerDisabled = false
-            default:
-                break
-            }
-        }
+//        .onChange(of: scenePhase) { _, newPhase in
+//            switch newPhase {
+//            case .active:
+//                UIApplication.shared.isIdleTimerDisabled = true
+//            case .background:
+//                NSLog("Entering background, \(UIApplication.shared.backgroundTimeRemaining) remaining")
+//                UIApplication.shared.isIdleTimerDisabled = false
+//            default:
+//                break
+//            }
+//        }
     }
 
     private func requestPhotoPermission() {

@@ -22,6 +22,7 @@ class UploadOperation {
         let asset: PHAssetProtocol
         let filename: String
         let existingContentHash: String?
+        let assetContentHash: String?
         let state: UploadState
     }
 
@@ -58,7 +59,7 @@ class UploadOperation {
         }
 
         // Download all the images, one at a time, in advance.
-        let assetDatas: [AssetData] = await tasks.asyncMap { task in
+        let uploads: [(UploadTask, AssetData)] = await tasks.asyncMap { (task: UploadTask) -> (UploadTask, AssetData)? in
             fetchState.progress += 1
             let data = await download(database: database, asset: task.asset)
             if data.hash != nil && task.existingContentHash == data.hash {
@@ -67,20 +68,18 @@ class UploadOperation {
                 // Updating the total here looks nicer, because the "upload" task total falls
                 // as we fetch and verify the image contents.
                 uploadState.total! -= 1
+                return nil
             }
-            return data
-        }
+            return (task, data)
+        }.compactMap(\.self)
+        assert(uploadState.total == uploads.count)
+
         fetchState.setComplete()
 
         // concurrently upload all the files
         //let uploadResults = await withTaskGroup(of: UploadResult.self) { group -> [UploadResult] in
         var uploadResults = [UploadResult]()
-        for (task, assetData) in zip(tasks, assetDatas) {
-            if assetData.hash != nil && task.existingContentHash == assetData.hash {
-                // This means that we've uploaded it before, in another install or whatever -
-                // the db hash equals the newly-calculated file hash, and we can skip it.
-                continue
-            }
+        for (task, assetData) in uploads {
             let uploadSession: Files.UploadSessionFinishArg
             do {
                 switch assetData {
@@ -91,6 +90,7 @@ class UploadOperation {
                         date: task.asset.creationDate ?? task.asset.modificationDate,
                         contentHash: hash,
                         data: data)
+                    assert(uploadSession.contentHash! == data.dropboxContentHash())
                 case .url(let url, let hash), .tempUrl(let url, let hash):
                     uploadSession = try await uploadUrl(
                         dropboxClient: dropboxClient,
@@ -98,6 +98,7 @@ class UploadOperation {
                         date: task.asset.creationDate ?? task.asset.modificationDate,
                         contentHash: hash,
                         url: url)
+                    assert(uploadSession.contentHash == url.dropboxContentHash())
                 case .failure(let error):
                     throw error
                 }
@@ -142,7 +143,23 @@ class UploadOperation {
         }
     }
 
-    private static func download(database: Database, asset: PHAssetProtocol) async -> AssetData {
+    static func fetchHashesOnly(
+        database: Database,
+        tasks: [UploadTask],
+        progressManager: ProgressManager
+    ) async {
+        batchNumber += 1
+        let fetchState = progressManager.createTask(named: "Fetch chunk \(batchNumber)", total: tasks.count, category: .upload)
+        fetchState.assets = tasks.map(\.asset)
+        defer { fetchState.remove() }
+        for task in tasks {
+            _ = await download(database: database, asset: task.asset)
+            fetchState.progress += 1
+        }
+        fetchState.setComplete()
+    }
+
+    static func download(database: Database, asset: PHAssetProtocol) async -> AssetData {
         // Get photo from photoKit. This is slow.
         do {
             // this is the _final_ image data, including patched exif for edited files and videos.
@@ -153,6 +170,8 @@ class UploadOperation {
                 if let photo = try Photo.forLocalIdentifier(asset.localIdentifier, in: context) {
                     photo.contentHash = data.hash
                     try context.save()
+                } else {
+                    fatalError()
                 }
             }
 
@@ -181,7 +200,7 @@ class UploadOperation {
             autorename: false,
             clientModified: date
         )
-        return Files.UploadSessionFinishArg(cursor: cursor, commit: commitInfo)
+        return Files.UploadSessionFinishArg(cursor: cursor, commit: commitInfo, contentHash: contentHash)
     }
 
     private static func uploadUrl(dropboxClient: DropboxClient, filename: String, date: Date?, contentHash: String, url: URL) async throws -> Files.UploadSessionFinishArg {

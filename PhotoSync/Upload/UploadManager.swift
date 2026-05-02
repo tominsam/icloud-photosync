@@ -117,6 +117,23 @@ class UploadManager {
         )
     }
 
+    /// Fetches and saves content hashes for unknown items only, without uploading anything.
+    func fetchUnknownOnly(plan: SyncPlan) async {
+        plan.uploadState.remove()
+        plan.replacementState.remove()
+        plan.deletionState.remove()
+
+        await plan.unknown.chunked(into: 10).parallelMap(maxJobs: 2) { chunk in
+            await UploadOperation.fetchHashesOnly(
+                database: self.database,
+                tasks: chunk,
+                progressManager: self.progressManager
+            )
+            plan.unknownState.progress += chunk.count
+        }
+        plan.unknownState.setComplete()
+    }
+
     /// Performs the uploads and deletions described in the plan.
     func execute(plan: SyncPlan) async {
         do {
@@ -222,12 +239,6 @@ class UploadManager {
             let file = filesLookup[photo.path.localizedLowercase]
             filesLookup.removeValue(forKey: photo.path.localizedLowercase)
 
-            if file != nil && photo.contentHash == file?.contentHash {
-                // The destination exists and has the right content hash.
-                // We don't need to do anything,
-                continue
-            }
-
             let state: UploadOperation.UploadState
             if file == nil {
                 // There is no remote file with this path - we need to upload it.
@@ -238,16 +249,22 @@ class UploadManager {
                 // There's a file with the right path, but the local photo has no content
                 // hash. We need to generate the hash to know what to do.
                 state = .unknown
-            } else {
+            } else if photo.contentHash != file?.contentHash {
                 // There's a remote file with one hash, but the local file has a different
                 // hash. Must be a local edit (or something caused the target filename to change)
                 state = .replacement
+            } else {
+                // The destination exists and has the right content hash.
+                // We don't need to do anything,
+                continue
             }
+
             uploads.append(
                 UploadOperation.UploadTask(
                     asset: asset,
                     filename: photo.path,
                     existingContentHash: file?.contentHash,
+                    assetContentHash: photo.contentHash,
                     state: state
                 )
             )

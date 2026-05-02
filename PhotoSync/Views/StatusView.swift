@@ -1,84 +1,5 @@
 import SwiftUI
 
-struct AccountHeader: View {
-    var syncCoordinator: SyncCoordinator
-
-    var body: some View {
-        HStack {
-            if syncCoordinator.isLoggedIn {
-                Text(syncCoordinator.dropboxEmail ?? "Dropbox").bold()
-                Spacer()
-                Button("Log out") {
-                    syncCoordinator.disconnectDropbox()
-                }
-            } else {
-                Text("Not connected").bold()
-                Spacer()
-                Button("Connect to Dropbox") {
-                    syncCoordinator.connectDropbox()
-                }
-            }
-        }
-        .padding([.leading, .trailing])
-        .padding([.top, .bottom], 12)
-    }
-}
-
-struct ErrorList: View {
-    var errors: [ServiceError]
-
-    var body: some View {
-        if !errors.isEmpty {
-            Text("Errors")
-                .headerStyle()
-                .padding(.horizontal)
-            
-            ForEach(errors, id: \.id) { error in
-                Text(error.message)
-                    .padding(.horizontal)
-            }
-        }
-    }
-}
-
-struct PlanButtons: View {
-    var confirm: () -> Void
-
-    var body: some View {
-        Button(action: confirm) {
-            Text("Proceed")
-                .frame(maxWidth: .infinity)
-        }
-        .buttonStyle(.borderedProminent)
-        .padding()
-    }
-}
-
-struct SectionView: View {
-    var title: String
-    var states: [TaskProgress]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            if !states.isEmpty {
-                Text(title)
-                    .headerStyle()
-                    .padding(.horizontal)
-            
-                ForEach(states) { state in
-                    StateLabel(leading: state.name, state: state)
-                        .transition(
-                            .asymmetric(
-                                insertion: .move(edge: .bottom).combined(with: .opacity).animation(.easeOut),
-                                removal: .opacity
-                            )
-                        )
-                }
-            }
-        }.animation(.easeInOut, value: states.map(\.id))
-    }
-}
-
 struct StatusView: View {
 
     var syncCoordinator: SyncCoordinator
@@ -93,8 +14,20 @@ struct StatusView: View {
                 SectionView(title: "Fetch", states: fetchStates)
                 SectionView(title: "Upload", states: uploadStates)
                 ErrorList(errors: syncCoordinator.errors)
-                if syncCoordinator.pendingPlan != nil {
-                    PlanButtons(confirm: syncCoordinator.confirmPlan)
+                if let plan = syncCoordinator.pendingPlan {
+                    PlanButtons(
+                        confirm: { Task { await syncCoordinator.confirmPlan() } },
+                        fetchOnly: plan.unknown.isEmpty ? nil : { Task { await syncCoordinator.confirmPlanFetchOnly() } }
+                    )
+                }
+                if syncCoordinator.states.allSatisfy(\.complete) {
+                    Button(action: {
+                        Task { await syncCoordinator.sync() }
+                    }, label: {
+                        Text("Restart")
+                    })
+                    .buttonStyle(PrimaryButtonStyle())
+                    .padding()
                 }
             }
             .padding(.bottom, 300) // for scroll convenience
@@ -103,6 +36,23 @@ struct StatusView: View {
         }
         .safeAreaBar(edge: .top) {
             Color.clear.frame(height: 0)
+        }
+    }
+}
+
+struct ErrorList: View {
+    var errors: [ServiceError]
+
+    var body: some View {
+        if !errors.isEmpty {
+            Text("Errors")
+                .headerStyle()
+                .padding(.horizontal)
+
+            ForEach(errors, id: \.id) { error in
+                Text(error.message)
+                    .padding(.horizontal)
+            }
         }
     }
 }

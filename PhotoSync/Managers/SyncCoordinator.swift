@@ -16,15 +16,24 @@ struct ServiceError: Identifiable, Sendable {
 
 @MainActor
 protocol SyncCoordinator: Observable {
-    var pendingPlan: UploadManager.SyncPlan? { get }
     var isLoggedIn: Bool { get }
     var dropboxEmail: String? { get }
-    var errors: [ServiceError] { get }
+
+    /// Progress for individual jobs
     var states: [TaskProgress] { get }
-    
+    /// Erorrs from jobs
+    var errors: [ServiceError] { get }
+    /// Set once we have worked out an upload plan
+    var pendingPlan: UploadManager.SyncPlan? { get }
+
     func connectDropbox()
     func disconnectDropbox()
-    func confirmPlan()
+
+    func sync() async
+    /// Call when there is a plan to start sync
+    func confirmPlan() async
+    /// Fetch content hashes for unknown items only, then restart sync
+    func confirmPlanFetchOnly() async
 }
 
 /// Master coordinator for the whole sync operation, tracks state, and it's also the view
@@ -32,23 +41,17 @@ protocol SyncCoordinator: Observable {
 @MainActor
 @Observable
 class SyncCoordinatorImpl: SyncCoordinator {
-    static let tempDir = URL(
-        fileURLWithPath: NSTemporaryDirectory(),
-        isDirectory: true
-    ).appendingPathComponent("PhotoSync", conformingTo: .folder)
-    
     let database: Database
     let progressManager = ProgressManager()
-
-    // keep the app alive when we background it for as long as possible
-    var backgroundTask: UIBackgroundTaskIdentifier?
+    var photoManager: PhotoKitManager?
+    var dropboxManager: DropboxManager?
+    var uploadManager: UploadManager?
     
     // set if there's a sync running
     var syncTask: Task<Void, Never>?
 
     // set while waiting for the user to confirm a planned sync
     var pendingPlan: UploadManager.SyncPlan?
-    private var planContinuation: CheckedContinuation<Void, Never>?
 
     // UI state
     var isLoggedIn: Bool = false
@@ -62,6 +65,7 @@ class SyncCoordinatorImpl: SyncCoordinator {
     
     init(database: Database) {
         self.database = database
+
     }
     
     func maybeSync() {
@@ -82,12 +86,6 @@ class SyncCoordinatorImpl: SyncCoordinator {
         }
     }
     
-    func confirmPlan() {
-        planContinuation?.resume()
-        planContinuation = nil
-        pendingPlan = nil
-    }
-
     func logError(_ error: ServiceError) {
         NSLog("%@", "[ERROR] \(error.message): \(error.path)")
         errors.append(error)
@@ -97,42 +95,23 @@ class SyncCoordinatorImpl: SyncCoordinator {
         guard let client = dropboxClient else {
             fatalError()
         }
-
-        // If the user backgrounds the app, try to stay alive as long as possible
-        // Future work - schedule a notification for when we lose this?
-        backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "Sync") { [weak self] in
-            NSLog("Stopping background task")
-            if let identifier = self?.backgroundTask {
-                UIApplication.shared.endBackgroundTask(identifier)
-            }
-        }
         
-        // Clear out anything we left in temp from the last run
-        try? FileManager.default.createDirectory(at: SyncCoordinatorImpl.tempDir, withIntermediateDirectories: true)
-        if let tempFiles = try? FileManager.default.contentsOfDirectory(at: SyncCoordinatorImpl.tempDir, includingPropertiesForKeys: nil) {
-            for file in tempFiles {
-                do {
-                    try FileManager.default.removeItem(at: file)
-                } catch {
-                    logError(ServiceError(path: file.absoluteString, message: "Failed to delete temp file", error: nil))
-                }
-            }
-        }
+        progressManager.reset()
         
-        let photoManager = PhotoKitManager(
+        photoManager = PhotoKitManager(
             database: database,
             progressManager: progressManager,
             errorUpdate: self.logError,
         )
-
-        let dropboxManager = DropboxManager(
+        
+        dropboxManager = DropboxManager(
             database: database,
             dropboxClient: client,
             progressManager: progressManager,
             errorUpdate: self.logError,
         )
-
-        let uploadManager = UploadManager(
+        
+        uploadManager = UploadManager(
             database: database,
             dropboxClient: client,
             progressManager: progressManager,
@@ -143,46 +122,84 @@ class SyncCoordinatorImpl: SyncCoordinator {
         await withTaskGroup { group in
             group.addTask {
                 NSLog("%@", "Starting photo sync")
-                await photoManager.sync()
+                await self.photoManager?.sync()
             }
             group.addTask {
                 NSLog("%@", "Starting dropbox sync")
-                await dropboxManager.sync()
+                await self.dropboxManager?.sync()
             }
         }
-
+        
         // Those both need to have passed otherwise it's not safe to do any writes.
-        guard errors.isEmpty, let allAssets = photoManager.allAssets else {
+        guard errors.isEmpty, let allAssets = photoManager?.allAssets else {
             logError(ServiceError(path: "/", message: "Sync failed, aborting upload", error: nil))
             return
         }
         
         NSLog("%@", "Planning upload")
-        let plan: UploadManager.SyncPlan
+        let plan: UploadManager.SyncPlan?
         do {
-            plan = try await uploadManager.plan(allAssets: allAssets)
+            plan = try await uploadManager?.plan(allAssets: allAssets)
         } catch {
             logError(ServiceError(path: "/", message: error.localizedDescription, error: error))
             return
         }
+        
+        pendingPlan = plan
+    }
+    
+    func confirmPlan() async {
+        guard let plan = pendingPlan else {
+            return
+        }
+        NSLog("%@", "Starting upload")
+        pendingPlan = nil
 
-        if !plan.isEmpty {
-            await withCheckedContinuation { continuation in
-                self.pendingPlan = plan
-                self.planContinuation = continuation
+        let identifier = beginBackgroundSync()
+        defer { endBackgroundSync(identifier) }
+        UIApplication.shared.isIdleTimerDisabled = true
+
+        await uploadManager?.execute(plan: plan)
+        await dropboxManager?.sync()
+
+        UIApplication.shared.isIdleTimerDisabled = false
+    }
+
+    func confirmPlanFetchOnly() async {
+        guard let plan = pendingPlan else {
+            return
+        }
+        NSLog("%@", "Starting hash fetch for unknowns")
+        pendingPlan = nil
+
+        let identifier = beginBackgroundSync()
+        defer { endBackgroundSync(identifier) }
+        UIApplication.shared.isIdleTimerDisabled = true
+
+        await uploadManager?.fetchUnknownOnly(plan: plan)
+        await sync()
+
+        UIApplication.shared.isIdleTimerDisabled = false
+
+    }
+
+    private func beginBackgroundSync() -> UIBackgroundTaskIdentifier? {
+        var identifier: UIBackgroundTaskIdentifier?
+        identifier = UIApplication.shared.beginBackgroundTask(withName: "Sync") {
+            NSLog("Stopping background task")
+            MainActor.assumeIsolated {
+                if let identifier {
+                    UIApplication.shared.endBackgroundTask(identifier)
+                }
             }
         }
+        return identifier
+    }
 
-        NSLog("%@", "Starting upload")
-        await uploadManager.execute(plan: plan)
-        
-        // resync dropbox at the end to get the newly-uploaded files
-        await dropboxManager.sync()
-        
-        if let identifier = backgroundTask {
+    private func endBackgroundSync(_ identifier: UIBackgroundTaskIdentifier?) {
+        if let identifier {
             UIApplication.shared.endBackgroundTask(identifier)
         }
-        UIApplication.shared.isIdleTimerDisabled = false
     }
     
     func connectDropbox() {

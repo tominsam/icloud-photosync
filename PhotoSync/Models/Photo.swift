@@ -159,12 +159,21 @@ extension Photo {
             created = asset.creationDate
             changed = true
         }
+        
+        guard let assetModified = asset.modificationDate else {
+            fatalError()
+        }
 
-        if modified == nil || asset.modificationDate == nil || abs(modified!.timeIntervalSinceReferenceDate - asset.modificationDate!.timeIntervalSinceReferenceDate) > 20 {
+        if modified == nil || abs(modified!.timeIntervalSinceReferenceDate - assetModified.timeIntervalSinceReferenceDate) > 20 {
             // if the file has been changed, invalidate the content hash
             // and the path (because you can change the date on photos, and
             // even though we're exporting the original, the destination path
             // will use the edited date)
+            if modified == nil {
+                print("File \(asset.filename ?? "nil") (\(asset.prettyAge)) is added")
+            } else {
+                print("File \(asset.filename ?? "nil") (\(asset.prettyAge)) has changed")
+            }
             filename = nil
             contentHash = nil
             preferredPath = nil
@@ -240,3 +249,23 @@ extension Date {
         Date(timeIntervalSince1970: floor(self.timeIntervalSince1970))
     }
 }
+
+
+let prettyFormatter: DateComponentsFormatter = {
+    let formatter = DateComponentsFormatter()
+    formatter.allowedUnits = [.year, .month, .day, .hour, .minute] // Specify the units you want
+    formatter.maximumUnitCount = 2
+    formatter.unitsStyle = .abbreviated
+    return formatter
+}()
+
+extension PHAssetProtocol {
+    var prettyAge: String {
+        if let modificationDate, let age = prettyFormatter.string(from: -modificationDate.timeIntervalSinceNow) {
+            return "\(age) ago"
+        } else {
+            return "never modified"
+        }
+    }
+}
+
