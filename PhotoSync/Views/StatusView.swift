@@ -20,7 +20,7 @@ struct StatusView: View {
                         fetchOnly: plan.unknown.isEmpty ? nil : { Task { await syncCoordinator.confirmPlanFetchOnly() } }
                     )
                 }
-                if syncCoordinator.states.allSatisfy(\.complete) {
+                if !syncCoordinator.states.isEmpty && syncCoordinator.states.allSatisfy(\.complete) {
                     Button(action: {
                         Task { await syncCoordinator.sync() }
                     }, label: {

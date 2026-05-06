@@ -9,6 +9,7 @@ struct PrimaryButtonStyle: ButtonStyle {
             .background(Color.green.opacity(configuration.isPressed ? 0.4 : 0.7))
             .foregroundStyle(.white)
             .clipShape(RoundedRectangle(cornerRadius: 8))
+            .contentShape(.rect)
     }
 }
 
@@ -21,6 +22,7 @@ struct SecondaryButtonStyle: ButtonStyle {
             .background(.clear)
             .foregroundStyle(Color.green.opacity(configuration.isPressed ? 0.4 : 0.7))
             .clipShape(RoundedRectangle(cornerRadius: 8))
+            .contentShape(.rect)
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
                     .strokeBorder(Color.green.opacity(configuration.isPressed ? 0.4 : 0.8), lineWidth: 1.5)
