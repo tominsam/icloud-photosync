@@ -53,7 +53,8 @@ class UploadOperation {
             let data = await download(database: database, asset: task.asset)
             fetchState.progress += 1
             if data.hash != nil && task.existingContentHash == data.hash {
-                // Already uploaded — hash matches, nothing to do.
+                // Already uploaded — hash matches, nothing to do. Clean up any temp file.
+                data.cleanup()
                 return nil
             }
             return (task, data)
@@ -98,16 +99,13 @@ class UploadOperation {
                 case .failure(let error):
                     throw error
                 }
-                if case .tempUrl(let url, _) = assetData {
-                    // We exported a video to a temp file, let's clean that up
-                    try? FileManager.default.removeItem(at: url)
-                }
                 uploadState.progress += assetData.byteSize
                 uploadResults.append(.success(task.filename, uploadSession))
             } catch {
                 uploadState.progress += assetData.byteSize
                 uploadResults.append(.failure(path: task.filename, message: error.localizedDescription, error: error))
             }
+            assetData.cleanup()
         }
 
         guard !uploadResults.isEmpty else { return [] }

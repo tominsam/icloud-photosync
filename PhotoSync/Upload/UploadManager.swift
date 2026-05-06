@@ -156,11 +156,14 @@ class UploadManager {
         plan.deletionState.remove()
 
         await plan.unknown.chunked(into: 10).parallelMap(maxJobs: 2) { chunk in
-            _ = await UploadOperation.fetchBatch(
+            let ready = await UploadOperation.fetchBatch(
                 database: self.database,
                 tasks: chunk,
                 progressManager: self.progressManager
             )
+            // We're not uploading here — clean up any temp files for items whose hash
+            // didn't match Dropbox (fetchBatch already cleaned up the ones that did match).
+            for (_, data) in ready { data.cleanup() }
             plan.unknownState.progress += chunk.count
         }
         plan.unknownState.setComplete()
@@ -198,7 +201,7 @@ class UploadManager {
         // then delete removed files (don't need parallel here, the server
         // batch call is fast enough). Do this last, so that we're not deleting
         // things until all the proper backing up is done.
-        for chunk in plan.deletions.chunked(into: 400) {
+        for chunk in plan.deletions.chunked(into: 100) {
             await self.delete(chunk)
             plan.deletionState.progress += chunk.count
         }

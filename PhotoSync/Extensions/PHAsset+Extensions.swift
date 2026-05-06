@@ -25,6 +25,23 @@ enum AssetData {
         }
     }
 
+    static let tempDirectory: URL = {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("PhotoSyncVideos", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }()
+
+    static func cleanupTempDirectory() {
+        try? FileManager.default.removeItem(at: tempDirectory)
+        try? FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+    }
+
+    func cleanup() {
+        if case .tempUrl(let url, _) = self {
+            try? FileManager.default.removeItem(at: url)
+        }
+    }
+
     /// If fetched, this will be the dropbox content hash of the file, however it's stored.
     var hash: String? {
         switch self {
@@ -97,45 +114,57 @@ extension PHAsset: PHAssetProtocol {
     }
     
     func getImageData(version: PHImageRequestOptionsVersion) async throws -> AssetData {
-        let manager = PHImageManager.default()
-        
         switch mediaType {
         case .image:
-            let options = PHImageRequestOptions()
-            options.deliveryMode = .highQualityFormat
-            options.version = version
-            options.isNetworkAccessAllowed = true // download if required
-            options.isSynchronous = true // stay on thread for async simplicity
-            
-            let data: Data = try await withCheckedThrowingContinuation { continuation in
-                manager.requestImageDataAndOrientation(for: self, options: options) { data, _, _, info in
-                    guard let data = data else {
-                        let error = info?[PHImageErrorKey] as? Error
-                        NSLog("Photo fetch failed: %@", error.map { String(describing: $0) } ?? "")
+            // Use PHAssetResourceManager to get raw file bytes — requestImageDataAndOrientation
+            // can transcode or process differently on Mac vs iPhone, producing hash mismatches
+            // for the same iCloud photo.
+            let resources = PHAssetResource.assetResources(for: self)
+            guard let resource = resources.first(where: { $0.type == .photo }) else {
+                throw AssetError.fetch("No photo resource found", nil)
+            }
+
+            var data = Data()
+            let resourceOptions = PHAssetResourceRequestOptions()
+            resourceOptions.isNetworkAccessAllowed = true
+
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                PHAssetResourceManager.default().requestData(for: resource, options: resourceOptions) { chunk in
+                    data.append(chunk)
+                } completionHandler: { error in
+                    if let error = error {
                         continuation.resume(throwing: AssetError.fetch("Can't fetch photo", error))
-                        return
+                    } else {
+                        continuation.resume()
                     }
-                    continuation.resume(returning: data)
                 }
             }
-            
-            // If you edit the capture date of a photo in Photos, that doesn't change the Original
-            // bytes downloaded from the server. I kinda want to update the file on disk to have the
-            // right exif, because that means the dropbox photo browser will show the image in the
-            // right place (we'll always put it in the right folder on disk, though). But we can't
-            // do that, because exif editing is non-deterministic, so the content hash isn't predictable.
-            
-            //let dataWithExif = await Self.setDate(onImage: data, date: self.creationDate, timezone: self.timezone)
-            //return .data(dataWithExif, hash: dataWithExif.dropboxContentHash())
-            
+
             return .data(data, hash: data.dropboxContentHash())
             
         case .video:
-            let avAsset = try await manager.getAVAsset(for: self)
-            if let avUrlAsset = avAsset as? AVURLAsset {
-                return .url(avUrlAsset.url, hash: avUrlAsset.url.dropboxContentHash())
+            // Use PHAssetResourceManager to write raw bytes to a temp file — requestAVAsset
+            // can return transcoded or differently-processed data on Mac vs iPhone.
+            let resources = PHAssetResource.assetResources(for: self)
+            guard let resource = resources.first(where: { [.video, .fullSizeVideo].contains($0.type) }) else {
+                throw AssetError.fetch("No video resource found", nil)
             }
-            throw AssetError.fetch("Unknown asset type \(type(of: avAsset))", nil)
+            let ext = (resource.originalFilename as NSString).pathExtension
+            let tempUrl = AssetData.tempDirectory
+                .appendingPathComponent(UUID().uuidString)
+                .appendingPathExtension(ext)
+            let resourceOptions = PHAssetResourceRequestOptions()
+            resourceOptions.isNetworkAccessAllowed = true
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                PHAssetResourceManager.default().writeData(for: resource, toFile: tempUrl, options: resourceOptions) { error in
+                    if let error = error {
+                        continuation.resume(throwing: AssetError.fetch("Can't fetch video", error))
+                    } else {
+                        continuation.resume()
+                    }
+                }
+            }
+            return .tempUrl(tempUrl, hash: tempUrl.dropboxContentHash())
         default:
             throw AssetError.mediaType(mediaType)
         }

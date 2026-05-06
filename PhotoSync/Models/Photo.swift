@@ -4,6 +4,17 @@ import CoreData
 import Foundation
 import Photos
 
+enum PhotoSyncError: LocalizedError {
+    case missingCloudIdentifier(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .missingCloudIdentifier(let id):
+            return "Photo \(id) has no iCloud identifier — it may not be synced to iCloud yet. Sync aborted to preserve path stability."
+        }
+    }
+}
+
 // Protocol allows mocking for tests
 protocol PhotoProtocol {
     var photoKitId: String! { get }
@@ -76,7 +87,7 @@ extension Photo {
         }
 
         var changed = false
-        let photos = assets.map { asset in
+        let photos = try assets.map { asset in
             let photo = existing[asset.localIdentifier] ?? context.insertObject()
             if photo.update(from: asset) {
                 changed = true
@@ -86,8 +97,7 @@ extension Photo {
                     photo.cloudIdentifier = cloudId.stringValue
                     changed = true
                 } else {
-                    print("No cloudID for photo!")
-                    //fatalError()
+                    throw PhotoSyncError.missingCloudIdentifier(asset.localIdentifier)
                 }
             }
             return photo
@@ -123,18 +133,27 @@ extension Photo {
     /// This should be deterministic when you leave both files in place.
     static func allPhotosWithUniqueFilenames(in context: NSManagedObjectContext) throws -> [PhotoMapping] {
         let allPhotos = try Photo.matching(nil, in: context)
-        return uniqueFilenames(from: allPhotos)
+        return try uniqueFilenames(from: allPhotos)
     }
 
     /// Pure deduplication logic, separated from CoreData for testability.
-    static func uniqueFilenames(from photos: [PhotoProtocol]) -> [PhotoMapping] {
-        let sorted = photos.filter { $0.preferredPath != nil }.sorted { lhs, rhs in
+    static func uniqueFilenames(from photos: [PhotoProtocol]) throws -> [PhotoMapping] {
+        let filtered = photos.filter { $0.preferredPath != nil }
+
+        if let missing = filtered.first(where: { $0.cloudIdentifier == nil }) {
+            throw PhotoSyncError.missingCloudIdentifier(missing.photoKitId)
+        }
+
+        let sorted = filtered.sorted { lhs, rhs in
             // The output order of this function _must_ be deterministic! I have to
             // round the dates because different OS versions will return non-zero
             // nanoseconds, but the files we write have integer mtimes.
             if let lc = lhs.created?.integral(), let rc = rhs.created?.integral(), lc != rc { return lc < rc }
             //if let lm = lhs.modified?.integral(), let rm = rhs.modified?.integral(), lm != rm { return lm < rm }
             if let li = lhs.cloudIdentifier, let ri = rhs.cloudIdentifier, li != ri { return li < ri }
+            // Both have the same date and cloud identifier — should be unreachable
+            // since insertOrUpdate enforces non-nil cloud identifiers.
+            assertionFailure("Photos \(lhs.photoKitId) and \(rhs.photoKitId) are indistinguishable")
             return lhs.photoKitId < rhs.photoKitId
         }
         var assigned = Set<String>()

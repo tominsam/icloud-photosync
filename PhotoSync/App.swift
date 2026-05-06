@@ -12,6 +12,7 @@ struct PhotoSyncApp: App {
 
     init() {
         DropboxClientsManager.setupWithAppKey("ru820t3myp7s6vk")
+        AssetData.cleanupTempDirectory()
     }
 
     var body: some Scene {
