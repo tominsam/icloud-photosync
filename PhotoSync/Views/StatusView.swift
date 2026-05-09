@@ -14,7 +14,7 @@ struct StatusView: View {
                 SectionView(title: "Fetch", states: fetchStates)
                 SectionView(title: "Upload", states: uploadStates)
                 ErrorList(errors: syncCoordinator.errors)
-                if let plan = syncCoordinator.pendingPlan {
+                if let plan = syncCoordinator.pendingPlan, !plan.isEmpty {
                     PlanButtons(
                         confirm: { Task { await syncCoordinator.confirmPlan() } },
                         fetchOnly: plan.unknown.isEmpty ? nil : { Task { await syncCoordinator.confirmPlanFetchOnly() } }

@@ -177,7 +177,6 @@ class SyncCoordinatorImpl: SyncCoordinator {
         UIApplication.shared.isIdleTimerDisabled = true
 
         await uploadManager?.fetchUnknownOnly(plan: plan)
-        await sync()
 
         UIApplication.shared.isIdleTimerDisabled = false
 

@@ -153,7 +153,7 @@ extension Photo {
             if let li = lhs.cloudIdentifier, let ri = rhs.cloudIdentifier, li != ri { return li < ri }
             // Both have the same date and cloud identifier — should be unreachable
             // since insertOrUpdate enforces non-nil cloud identifiers.
-            assertionFailure("Photos \(lhs.photoKitId) and \(rhs.photoKitId) are indistinguishable")
+            assertionFailure("Photos \(lhs.photoKitId, default: "nil") and \(rhs.photoKitId, default: "nil") are indistinguishable")
             return lhs.photoKitId < rhs.photoKitId
         }
         var assigned = Set<String>()
@@ -201,24 +201,30 @@ extension Photo {
         }
 
         if filename == nil {
-            filename = asset.filename? // slow!
-                .stripFilenameMagicNumber()
+            filename = asset.filename // slow!
             changed = true
         }
 
-        // We're storing a path for the image in core data rather than deriving it every time, because
-        // (a) it's slow to derive (because fetching the file type is expensive) and (b) we want it to be
-        // consistent for every run of the app.
-        if let filename = filename, preferredPath == nil {
-            preferredPath = asset.dropboxPath(fromFilename: filename)
-            changed = true
+        // Always recompute preferredPath from the stripped filename — stripping here rather
+        // than on the cached filename means the raw original filename is preserved in the DB.
+        if let filename = filename {
+            let newPath = asset.dropboxPath(fromFilename: filename.stripFilenameMagicNumber())
+            if preferredPath != newPath {
+                preferredPath = newPath
+                changed = true
+            }
         }
         return changed
     }
 }
 
 extension String {
+    // Matches " (1)" style suffixes — used by our own incrementFilenameMagicNumber
     static let trailingDigit = try! NSRegularExpression(pattern: #"^(.*)\s\((\d+)\)$"#, options: [])
+    // Matches bare " 1" style suffixes on camera-roll filenames (e.g. "IMG_2706 1").
+    // Deliberately narrow — only strips when the base looks like a camera import (IMG_NNNN),
+    // to avoid stripping legitimate digits from user-titled photos.
+    static let trailingBareDigit = try! NSRegularExpression(pattern: #"^(IMG_\d+)\s\d+$"#, options: [.caseInsensitive])
 
     func stripFilenameMagicNumber() -> String {
         // Cut the filename into a path, the filename without extension, and the extension
@@ -226,10 +232,12 @@ extension String {
         var filename = ((self as NSString).deletingPathExtension as NSString).lastPathComponent
         let pathExtension = (self as NSString).pathExtension
 
-        // Look for an existing " (1)" at the end of the filename and extract it if present
-        if let match = Self.trailingDigit.firstMatch(in: filename, options: [], range: NSRange(filename.startIndex ..< filename.endIndex, in: filename)) {
-            let filenameRange = Range(match.range(at: 1), in: filename)!
-            filename = String(filename[filenameRange])
+        // Strip " (1)" or bare " 1" suffixes
+        let range = NSRange(filename.startIndex ..< filename.endIndex, in: filename)
+        let pattern = Self.trailingDigit.firstMatch(in: filename, options: [], range: range)
+                   ?? Self.trailingBareDigit.firstMatch(in: filename, options: [], range: range)
+        if let match = pattern {
+            filename = String(filename[Range(match.range(at: 1), in: filename)!])
         }
 
         // Glue the path back together

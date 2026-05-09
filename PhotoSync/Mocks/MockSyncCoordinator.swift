@@ -43,10 +43,12 @@ func mockPlan() -> UploadManager.SyncPlan {
         uploads: [],
         replacements: [],
         unknown: [],
+        moves: [],
         deletions: [],
         uploadState: mockTask(progress: 0),
         replacementState: mockTask(progress: 0),
         unknownState: mockTask(progress: 0),
+        moveState: mockTask(progress: 0),
         deletionState: mockTask(progress: 0),
     )
 }

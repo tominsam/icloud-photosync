@@ -60,24 +60,32 @@ class UploadManager {
         self.errorUpdate = errorUpdate
     }
 
+    struct MoveTask {
+        let fromPath: String
+        let toPath: String
+    }
+
     struct SyncPlan {
         let uploads: [UploadOperation.UploadTask]
         let replacements: [UploadOperation.UploadTask]
         let unknown: [UploadOperation.UploadTask]
+        let moves: [MoveTask]
         let deletions: [DeleteOperation.DeleteTask]
         let uploadState: TaskProgress
         let replacementState: TaskProgress
         let unknownState: TaskProgress
+        let moveState: TaskProgress
         let deletionState: TaskProgress
 
         var isEmpty: Bool {
-            uploads.isEmpty && replacements.isEmpty && unknown.isEmpty && deletions.isEmpty
+            uploads.isEmpty && replacements.isEmpty && unknown.isEmpty && moves.isEmpty && deletions.isEmpty
         }
 
         func removeStates() {
             uploadState.remove()
             replacementState.remove()
             unknownState.remove()
+            moveState.remove()
             deletionState.remove()
         }
     }
@@ -87,6 +95,10 @@ class UploadManager {
     /// so counts are visible in the UI immediately.
     func plan(allAssets: [PHAssetProtocol]) async throws -> SyncPlan {
         let planningState = progressManager.createTask(named: "Planning", total: 5, category: .upload)
+        try await Task.sleep(for: .milliseconds(100))
+
+        // files that exist in dropbox at a different path — server-side move, no upload needed
+        let moveState = progressManager.createTask(named: "Moved", category: .upload)
         try await Task.sleep(for: .milliseconds(100))
 
         // new images that need to be uploaded
@@ -109,7 +121,7 @@ class UploadManager {
 
         // Group every photo into categories based on if we need to upload it as a new
         // file, or a changed file, or delete it
-        let (changes, deletions) = try await database.perform { context in
+        let (changes, moves, deletions) = try await database.perform { context in
             // Everything we _want_ to upload in order (this is expensive)
             let allPhotos = try Photo.allPhotosWithUniqueFilenames(in: context)
             planningState.progress += 1
@@ -117,7 +129,8 @@ class UploadManager {
             let allFiles = try DropboxFile.matching(nil, in: context)
             planningState.progress += 1
 
-            return try Self.iterate(photos: allPhotos, files: allFiles, assets: allAssets)
+            let result = try Self.iterate(photos: allPhotos, files: allFiles, assets: allAssets)
+            return (result.uploads, result.moves, result.deletions)
         }
         planningState.progress += 1
 
@@ -133,6 +146,7 @@ class UploadManager {
         uploadState.total = uploads.count
         replacementState.total = replacements.count
         unknownState.total = unknown.count
+        moveState.total = moves.count
         deletionState.total = deletions.count
 
         planningState.remove()
@@ -141,10 +155,12 @@ class UploadManager {
             uploads: uploads,
             replacements: replacements,
             unknown: unknown,
+            moves: moves,
             deletions: deletions,
             uploadState: uploadState,
             replacementState: replacementState,
             unknownState: unknownState,
+            moveState: moveState,
             deletionState: deletionState
         )
     }
@@ -154,6 +170,7 @@ class UploadManager {
         plan.uploadState.remove()
         plan.replacementState.remove()
         plan.deletionState.remove()
+        plan.moveState.remove()
 
         await plan.unknown.chunked(into: 10).parallelMap(maxJobs: 2) { chunk in
             let ready = await UploadOperation.fetchBatch(
@@ -179,6 +196,13 @@ class UploadManager {
     }
 
     private func internalExecute(plan: SyncPlan) async throws {
+        // moves are cheap server-side operations — no data transfer, do these first
+        for chunk in plan.moves.chunked(into: 40) {
+            plan.moveState.progress += chunk.count
+            await self.move(chunk)
+        }
+        plan.moveState.setComplete()
+
         // prioritize new files - we have the file locally but there's nothing
         // in dropbox with that path. These are therefore new photos and are
         // the most important to back up
@@ -202,8 +226,8 @@ class UploadManager {
         // batch call is fast enough). Do this last, so that we're not deleting
         // things until all the proper backing up is done.
         for chunk in plan.deletions.chunked(into: 100) {
-            await self.delete(chunk)
             plan.deletionState.progress += chunk.count
+            await self.delete(chunk)
         }
         plan.deletionState.setComplete()
 
@@ -249,6 +273,45 @@ class UploadManager {
         }
     }
 
+    func move(_ tasks: [MoveTask]) async {
+        let entries = tasks.map { Files.RelocationPath(fromPath: $0.fromPath, toPath: $0.toPath) }
+        NSLog("%@", "Moving \(tasks.count) files")
+        do {
+            let launch = try await dropboxClient.files.moveBatchV2(entries: entries).asyncResponse()
+            switch launch {
+            case .asyncJobId(let jobId):
+                try await pollMoveJob(jobId: jobId)
+            case .complete(let result):
+                for entry in result.entries {
+                    if case .failure(let error) = entry {
+                        recordError(error.description)
+                    }
+                }
+            }
+        } catch {
+            recordError(error.localizedDescription)
+        }
+    }
+
+    private func pollMoveJob(jobId: String) async throws {
+        while true {
+            try? await Task.sleep(nanoseconds: 3_000_000 * UInt64.random(in: 1_000..<2_000))
+            let status = try await dropboxClient.files.moveBatchCheckV2(asyncJobId: jobId).asyncResponse()
+            switch status {
+            case .inProgress:
+                print("Awaiting move..")
+                continue
+            case .complete(let result):
+                for entry in result.entries {
+                    if case .failure(let error) = entry {
+                        recordError(error.description)
+                    }
+                }
+                return
+            }
+        }
+    }
+
     func delete(_ tasks: [DeleteOperation.DeleteTask]) async {
         do {
             try await DeleteOperation.deleteFiles(database: database, dropboxClient: self.dropboxClient, tasks: tasks)
@@ -257,24 +320,34 @@ class UploadManager {
         }
     }
 
+    struct IterateResult {
+        let uploads: [UploadOperation.UploadTask]
+        let moves: [MoveTask]
+        let deletions: [DeleteOperation.DeleteTask]
+    }
+
     /// Build a list of things to do based on the ground state of the device
     /// - Parameters:
     ///   - photos: A list of the photos we _want_ to exist, along with the path we want them to have
     ///   - files: All the files that exist in the remote server
     ///   - assets: A list of PHAssets on the local device
-    /// - Returns: Two sets of tasks - the array of UploadTask objects are the photos we might need to upload,
-    /// (classified into "must be uploaded", becaue they're newly created or changed files, and "might need to be uploaded",
-    /// because we don't have a contentHash for those files) and the DeleteTask array is files the need to be removed from the server.
+    /// - Returns: uploads/replacements/unknowns, server-side moves, deletions, and path adoptions
     nonisolated static func iterate(
         photos: [Photo.PhotoMapping],
         files: [DropboxFileProtocol],
         assets: [PHAssetProtocol],
-    ) throws -> ([UploadOperation.UploadTask], [DeleteOperation.DeleteTask]) {
+    ) throws -> IterateResult {
         // the objects in Photos are thin - build a lookup table for the real assets
         let assetsLookup = assets.uniqueBy(\.localIdentifier)
         var filesLookup: [String: DropboxFileProtocol] = files.uniqueBy(\.pathLower)
+        // Reverse lookup: contentHash -> file, for detecting renames without re-uploading
+        var filesByHash: [String: DropboxFileProtocol] = [:]
+        for file in files {
+            filesByHash[file.contentHash] = file
+        }
 
         var uploads = [UploadOperation.UploadTask]()
+        var moves = [MoveTask]()
         var deletions = [DeleteOperation.DeleteTask]()
 
         for photo in photos {
@@ -287,11 +360,25 @@ class UploadManager {
             let file = filesLookup[photo.path.localizedLowercase]
             filesLookup.removeValue(forKey: photo.path.localizedLowercase)
 
+            if file == nil, let hash = photo.contentHash, let sourceFile = filesByHash[hash] {
+                // Content hash matches a file at a different path.
+                filesLookup.removeValue(forKey: sourceFile.pathLower) // don't queue it for deletion
+                let expectedFolder = (photo.path.localizedLowercase as NSString).deletingLastPathComponent
+                let existingFolder = (sourceFile.pathLower as NSString).deletingLastPathComponent
+                if expectedFolder == existingFolder {
+                    // Same folder, different filename — PHAssetResource.originalFilename is
+                    // device-specific (e.g. different IMG numbers or UUIDs on Mac vs iPhone).
+                    // The content is already in Dropbox; skip without renaming or updating the DB.
+                    // This is stable: the hash still matches on the next sync so we skip again.
+                } else {
+                    // Different folder — the creation date was edited. Issue a server-side move.
+                    moves.append(MoveTask(fromPath: sourceFile.pathLower, toPath: photo.path))
+                }
+                continue
+            }
+
             let state: UploadOperation.UploadState
             if file == nil {
-                // There is no remote file with this path - we need to upload it.
-                // (future work - in theory I guess if there is some file somewhere
-                // else with the right hash we could move it or copy it?)
                 state = .new
             } else if photo.contentHash == nil {
                 // There's a file with the right path, but the local photo has no content
@@ -326,6 +413,6 @@ class UploadManager {
         // delete more recent files first (month is in the path)
         deletions.sort { (lhs, rhs) in lhs.pathLower > rhs.pathLower }
 
-        return (uploads, deletions)
+        return IterateResult(uploads: uploads, moves: moves, deletions: deletions)
     }
 }
