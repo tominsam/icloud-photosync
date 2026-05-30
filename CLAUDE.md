@@ -19,7 +19,7 @@ SwiftLint runs automatically as a post-compile build phase. To run manually:
 /opt/homebrew/bin/swiftlint
 ```
 
-There are no automated tests in this project.
+Unit tests live in `PhotoSyncTests/`. Run via Xcode or `xcodebuild test -scheme PhotoSync -destination 'platform=iOS Simulator,name=iPhone 16'`. Tests cover: `UploadManager.iterate()` logic, filename/collision handling, `TimezoneMapper`, SHA256 hashing, and async sequence extensions. No integration tests for Dropbox or PhotoKit.
 
 ## What PhotoSync Does
 
@@ -38,10 +38,10 @@ The master orchestrator is `SyncCoordinator`. A sync run proceeds as:
 
 ### Key Components
 
-- **`SyncCoordinator`** (`Managers/`) — orchestrates all three phases, manages app-level UI state, handles Dropbox OAuth, background task registration
+- **`SyncCoordinator`** (`Managers/`) — a protocol (implemented by `SyncCoordinatorImpl`) that orchestrates all three phases, manages app-level UI state, handles Dropbox OAuth, background task registration. The protocol split enables mock injection in tests/previews via `MockSyncCoordinator`.
 - **`PhotoKitManager`** — fetches from PhotoKit, persists to `Photo` CoreData entities in batches of 1000 (200 on incremental syncs)
 - **`DropboxManager`** — paginated Dropbox folder listing with cursor-based incremental syncs stored in `SyncToken`
-- **`UploadManager`** / **`UploadOperation`** — photo upload logic, SHA256 content hashing to detect changes, collision-aware file naming
+- **`UploadManager`** / **`UploadOperation`** — photo upload logic, SHA256 content hashing to detect changes, collision-aware file naming. Uploads are batched by `UploadAccumulator` (flushes at 20MB) before being submitted to the Dropbox batch API.
 - **`Database`** — `actor`-based CoreData wrapper providing thread-safe async/await access; handles automatic DB recreation on corruption
 - **`TimezoneMapper`** — converts a GPS coordinate to a `TimeZone` for folder-path generation. Implemented as a 0.25° lookup grid in `PhotoSync/Resources/timezone_polygons.bin` (40KB zlib-compressed; decompresses to a 2MB flat uint16 grid). To regenerate: `pip3 install timezonefinder && python3 scripts/generate_timezone_grid.py`
 
@@ -60,10 +60,14 @@ Photos are organized under a month folder (`YYYY-MM/filename.ext`). When a filen
 
 - All CoreData access goes through the `Database` actor
 - `SyncCoordinator` and managers are `@Observable` classes on the main actor
-- `CollectionConcurrencyKit` is used for `asyncMap`/`asyncForEach` on sequences
+- `asyncMap`/`asyncForEach` are custom implementations in `Extensions/Sequence+Extensions.swift`
 - Background task support via `BGAppRefreshTask`; screen kept awake during active sync
 
 ### External Dependencies (SPM)
 
 - **SwiftyDropbox** — Dropbox API client
 - **KeychainSwift** — secure token storage
+
+### `UploadManager.iterate()` — Core Diffing Logic
+
+`iterate()` is a `nonisolated static` method that takes the current `Photo` and `DropboxFile` sets and returns categorized work items (new uploads, replacements, unknowns, deletions). This is the heart of the sync decision logic and is the most thoroughly unit-tested part of the codebase.
