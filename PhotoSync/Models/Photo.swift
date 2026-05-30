@@ -183,20 +183,14 @@ extension Photo {
             fatalError()
         }
 
-        if modified == nil || abs(modified!.timeIntervalSinceReferenceDate - assetModified.timeIntervalSinceReferenceDate) > 20 {
-            // if the file has been changed, invalidate the content hash
-            // and the path (because you can change the date on photos, and
-            // even though we're exporting the original, the destination path
-            // will use the edited date)
-            if modified == nil {
-                print("File \(asset.filename ?? "nil") (\(asset.prettyAge)) is added")
-            } else {
-                print("File \(asset.filename ?? "nil") (\(asset.prettyAge)) has changed")
-            }
-            filename = nil
-            contentHash = nil
-            preferredPath = nil
-            modified = asset.modificationDate
+        if modified == nil {
+            print("File \(asset.filename ?? "nil") (\(asset.prettyAge)) is added")
+            modified = assetModified
+            changed = true
+        } else if abs(modified!.timeIntervalSinceReferenceDate - assetModified.timeIntervalSinceReferenceDate) > 20 {
+            // Modification date changed but we only upload originals, so the content
+            // and filename are unchanged — just track the new date.
+            modified = assetModified
             changed = true
         }
 
