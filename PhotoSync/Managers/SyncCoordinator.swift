@@ -160,7 +160,11 @@ class SyncCoordinatorImpl: SyncCoordinator {
         UIApplication.shared.isIdleTimerDisabled = true
 
         await uploadManager?.execute(plan: plan)
-        await dropboxManager?.sync()
+        await sync()
+        if pendingPlan?.isEmpty == true {
+            pendingPlan?.removeStates()
+            pendingPlan = nil
+        }
 
         UIApplication.shared.isIdleTimerDisabled = false
     }
@@ -177,6 +181,15 @@ class SyncCoordinatorImpl: SyncCoordinator {
         UIApplication.shared.isIdleTimerDisabled = true
 
         await uploadManager?.fetchUnknownOnly(plan: plan)
+
+        if let allAssets = photoManager?.allAssets {
+            NSLog("%@", "Re-planning after hash fetch")
+            do {
+                pendingPlan = try await uploadManager?.plan(allAssets: allAssets)
+            } catch {
+                logError(ServiceError(path: "/", message: error.localizedDescription, error: error))
+            }
+        }
 
         UIApplication.shared.isIdleTimerDisabled = false
 
