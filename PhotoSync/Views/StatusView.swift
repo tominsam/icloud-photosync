@@ -14,19 +14,27 @@ struct StatusView: View {
                 SectionView(title: "Fetch", states: fetchStates)
                 SectionView(title: "Upload", states: uploadStates)
                 ErrorList(errors: syncCoordinator.errors)
+
                 if let plan = syncCoordinator.pendingPlan, !plan.isEmpty {
                     PlanButtons(
                         confirm: { Task { await syncCoordinator.confirmPlan() } },
                         fetchOnly: plan.unknown.isEmpty ? nil : { Task { await syncCoordinator.confirmPlanFetchOnly() } }
                     )
-                }
-                if !syncCoordinator.states.isEmpty && syncCoordinator.states.allSatisfy(\.complete) {
-                    Button(action: {
-                        Task { await syncCoordinator.sync() }
-                    }, label: {
-                        Text("Restart")
-                    })
-                    .buttonStyle(PrimaryButtonStyle())
+                } else if !uploadStates.isEmpty && uploadStates.allSatisfy({ $0.total == 0 || $0.complete }) {
+                    VStack(spacing: 12) {
+                        Text("Nothing to do!")
+                            .font(.title2)
+                            .bold()
+                        Text("Your photos are backed up.")
+                            .foregroundStyle(.secondary)
+                        Button(action: {
+                            Task { await syncCoordinator.sync() }
+                        }, label: {
+                            Text("Sync again")
+                        })
+                        .buttonStyle(PrimaryButtonStyle())
+                    }
+                    .frame(maxWidth: .infinity)
                     .padding()
                 }
             }
@@ -67,6 +75,20 @@ extension View {
             .padding(.top, 12)
             .padding(.bottom, 6)
     }
+}
+
+#Preview("All done") {
+    let coordinator = MockSyncCoordinator()
+    coordinator.isLoggedIn = true
+    coordinator.dropboxEmail = "alice@example.com"
+    coordinator.states = [
+        mockTask(named: "Local photos", progress: 1000, total: 1000, category: .fetch),
+        mockTask(named: "Dropbox", progress: 1000, total: 1000, category: .fetch),
+        mockTask(progress: 0, total: 0),
+        mockTask(progress: 0, total: 0),
+        mockTask(progress: 0, total: 0),
+    ]
+    return StatusView(syncCoordinator: coordinator)
 }
 
 #Preview {

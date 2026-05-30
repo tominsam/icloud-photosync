@@ -125,6 +125,8 @@ class SyncCoordinatorImpl: SyncCoordinator {
                 await self.photoManager?.sync()
             }
             group.addTask {
+                // cheap hack to force ordering on the statuses
+                try? await Task.sleep(for: .milliseconds(100))
                 NSLog("%@", "Starting dropbox sync")
                 await self.dropboxManager?.sync()
             }
